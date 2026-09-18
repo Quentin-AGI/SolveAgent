@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07070b" />
+    <meta
+      name="description"
+      content="FixAgent｜Hardware Doctor 是 Solve Agent 推出的硬件售后诊断 Agent：结合设备照片与状态，逐步诊断故障、引导测试并生成完整售后工单。"
+    />
+    <title>Solve Agent｜FixAgent 硬件售后诊断 Agent</title>
+    <script>document.documentElement.classList.add("js");</script>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳到主要内容</a>
+
+    <header class="site-header" data-header>
+      <div class="header-inner shell">
+        <a class="brand" href="#top" aria-label="Solve Agent 首页">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 40 40" fill="none">
+              <path d="M9 13.5c2.8-4.4 7-6.5 12.6-6.5 5.8 0 9.6 2.3 9.6 6.2 0 3.2-2.5 4.7-7.6 5.8l-7.1 1.6c-5 1.1-7.6 3.7-7.6 7.2 0 4.4 4 7.2 10.6 7.2 5.9 0 10.3-2.1 13.1-6.4" />
+              <circle cx="12" cy="10" r="2.3" />
+              <circle cx="28" cy="30" r="2.3" />
+            </svg>
+          </span>
+          <span class="brand-copy">
+            <strong>Solve</strong>
+            <small>AGENT</small>
+          </span>
+        </a>
+
+        <nav class="desktop-nav" aria-label="主导航">
+          <a href="#fixagent">FixAgent</a>
+          <a href="#skills">Skill</a>
+          <a href="#agents">Agent</a>
+          <a href="#features">功能</a>
+        </nav>
+
+        <div class="header-actions">
+          <span class="language"><span aria-hidden="true">CN</span><span class="sr-only">当前语言：简体中文</span></span>
+          <button class="button button-ghost small" type="button" data-demo-open>预约演示</button>
+          <a class="button button-outline small" href="#contact">申请试用</a>
+          <button class="menu-toggle" type="button" aria-label="打开菜单" aria-controls="mobile-navigation" aria-expanded="false" data-menu-toggle>
+            <span></span><span></span>
+          </button>
+        </div>
+      </div>
+
+      <nav class="mobile-nav" id="mobile-navigation" aria-label="移动端导航" data-mobile-nav>
+        <a href="#fixagent">FixAgent</a>
+        <a href="#skills">Skill</a>
+        <a href="#agents">Agent</a>
+        <a href="#features">功能</a>
+        <a class="button button-primary" href="#contact">申请试用</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="aurora aurora-one"></div>
+        <div class="aurora aurora-two"></div>
+        <div class="stars" aria-hidden="true"></div>
+
+        <div class="shell hero-grid">
+          <div class="hero-copy reveal">
+            <div class="eyebrow"><span class="eyebrow-dot"></span> 核心产品 · FixAgent｜Hardware Doctor</div>
+            <h1>
+              不止聊天，<br />
+              <span class="gradient-text hero-fix-line">解决硬件售后故障。</span>
+            </h1>
+            <p>FixAgent 更像一位“硬件医生”：看懂设备照片和状态，判断可能原因，引导用户测试，再根据反馈继续诊断，直到解决问题或生成完整售后工单。</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#fixagent">体验完整诊断 <span>↘</span></a>
+              <button class="button button-light" type="button" data-demo-open>
+                <span class="play-icon">▶</span> 预约诊断演示
+              </button>
+            </div>
+            <div class="hero-proof">
+              <div class="avatar-stack" aria-hidden="true">
+                <span>看</span><span>诊</span><span>✓</span>
+              </div>
+              <div><strong>从照片到工单</strong><small>一条完整的硬件售后诊断链路</small></div>
+            </div>
+            <button class="motion-toggle" type="button" aria-pressed="false" data-motion-toggle><span aria-hidden="true">Ⅱ</span> 暂停动态效果</button>
+          </div>
+
+          <div class="hero-visual reveal delay-1" role="img" aria-label="FixAgent 识别设备红灯闪烁状态，引导用户进行安全测试，并推进故障诊断的模拟界面">
+            <div class="orbit orbit-one"></div>
+            <div class="orbit orbit-two"></div>
+            <div class="orbit-dot dot-one"></div>
+            <div class="orbit-dot dot-two"></div>
+            <div class="orbit-dot dot-three"></div>
+
+            <div class="agent-core">
+              <div class="core-halo"></div>
+              <div class="core-mark">
+                <svg viewBox="0 0 40 40" fill="none" aria-hidden="true">
+                  <path d="M9 13.5c2.8-4.4 7-6.5 12.6-6.5 5.8 0 9.6 2.3 9.6 6.2 0 3.2-2.5 4.7-7.6 5.8l-7.1 1.6c-5 1.1-7.6 3.7-7.6 7.2 0 4.4 4 7.2 10.6 7.2 5.9 0 10.3-2.1 13.1-6.4" />
+                </svg>
+              </div>
+              <strong>FixAgent</strong>
+              <span>HARDWARE DOCTOR · 诊断中</span>
+            </div>
+
+            <div class="float-card chat-card">
+              <span class="mini-avatar">!</span>
+              <div><small>设备状态</small><p>指示灯连续闪红，设备无法启动</p></div>
+            </div>
+            <div class="float-card action-card">
+              <span class="status-pulse"></span>
+              <div><small>下一步安全测试</small><p>断电 30 秒后重新连接适配器</p></div>
+              <span class="done">3</span>
+            </div>
+            <div class="float-card metric-card">
+              <small>模拟诊断进度</small>
+              <strong>03 / 05</strong>
+              <span class="metric-up">引导测试</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="platform-strip">
+          <div class="platform-track">
+            <span class="platform-label">FixAgent 诊断闭环</span>
+            <div class="platform-set">
+              <span class="platform-logo">01 看懂现场</span>
+              <span class="platform-logo">02 判断原因</span>
+              <span class="platform-logo">03 引导测试</span>
+              <span class="platform-logo">04 根据反馈复诊</span>
+              <span class="platform-logo">05 解决 / 生成工单</span>
+            </div>
+            <div class="platform-set platform-duplicate" aria-hidden="true">
+              <span class="platform-logo">01 看懂现场</span>
+              <span class="platform-logo">02 判断原因</span>
+              <span class="platform-logo">03 引导测试</span>
+              <span class="platform-logo">04 根据反馈复诊</span>
+              <span class="platform-logo">05 解决 / 生成工单</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section fixagent-section" id="fixagent" aria-labelledby="fixagent-title">
+        <div class="fixagent-grid-bg" aria-hidden="true"></div>
+        <div class="shell">
+          <header class="fixagent-heading reveal">
+            <div>
+              <span class="kicker">FLAGSHIP AGENT · HARDWARE DOCTOR</span>
+              <h2 id="fixagent-title">从“会回答”，<br />到“会诊断”</h2>
+            </div>
+            <div class="fixagent-heading-copy">
+              <strong>一张照片不是结论，而是诊断的起点。</strong>
+              <p>普通 AI 客服往往在给出答案后停止。FixAgent 会继续收集证据、验证判断、更新诊断路径，直到给出可执行方案，或把完整上下文交给售后人员。</p>
+            </div>
+          </header>
+
+          <div class="fixagent-showcase reveal">
+            <div class="fixagent-copy">
+              <div class="fixagent-lockup">
+                <span aria-hidden="true">F</span>
+                <div><strong>FixAgent</strong><small>HARDWARE DOCTOR</small></div>
+              </div>
+              <h3>像硬件医生一样，<br /><span>边看、边问、边验证</span></h3>
+              <p>结合设备照片、型号、报错与运行状态形成原因假设；用用户能执行的安全测试逐步排除，再根据反馈选择下一步。</p>
+
+              <div class="fixagent-compare" role="group" aria-label="普通 AI 客服与 FixAgent 的处理方式对比">
+                <div><small>普通 AI 客服</small><strong>搜索答案 → 回复 → 对话结束</strong></div>
+                <div class="highlight"><small>FixAgent</small><strong>观察 → 假设 → 测试 → 复诊 → 闭环</strong></div>
+              </div>
+
+              <button class="button button-primary" type="button" data-demo-open>预约 FixAgent 演示 <span>↗</span></button>
+            </div>
+
+            <div class="fixagent-console" role="region" aria-label="FixAgent 五步硬件故障诊断交互演示">
+              <div class="fix-console-bar">
+                <div aria-hidden="true"><i></i><i></i><i></i></div>
+                <span>FixAgent / Diagnostic Session #A-1042</span>
+                <b>INTERACTIVE DEMO</b>
+              </div>
+
+              <ol class="fixagent-steps" role="list" aria-label="查看 FixAgent 五步诊断过程">
+                <li><button type="button" aria-current="step" aria-controls="fixagent-stage-panel" data-fix-step="0"><span>01</span><strong>看懂设备</strong><small>照片与状态</small></button></li>
+                <li><button type="button" aria-controls="fixagent-stage-panel" data-fix-step="1"><span>02</span><strong>判断原因</strong><small>形成假设</small></button></li>
+                <li><button type="button" aria-controls="fixagent-stage-panel" data-fix-step="2"><span>03</span><strong>引导测试</strong><small>安全验证</small></button></li>
+                <li><button type="button" aria-controls="fixagent-stage-panel" data-fix-step="3"><span>04</span><strong>继续诊断</strong><small>反馈复诊</small></button></li>
+                <li><button type="button" aria-controls="fixagent-stage-panel" data-fix-step="4"><span>05</span><strong>解决 / 建单</strong><small>完成闭环</small></button></li>
+              </ol>
+
+              <div class="fix-console-main">
+                <div class="fix-diagnosis-panel" id="fixagent-stage-panel" aria-labelledby="fixagent-stage-title" tabindex="-1">
+                  <div class="fix-progress-head">
+                    <span>诊断路径</span>
+                    <strong data-fix-progress-text>01 / 05</strong>
+                  </div>
+                  <div class="fix-progress" role="progressbar" aria-label="FixAgent 诊断步骤" aria-valuemin="0" aria-valuemax="5" aria-valuenow="1" aria-valuetext="第 1 步，共 5 步" data-fix-progress><span></span></div>
+                  <span class="fix-stage-kicker" data-fix-kicker>设备证据</span>
+                  <h3 id="fixagent-stage-title" data-fix-title>识别到故障灯连续闪红 3 次</h3>
+                  <p data-fix-description>FixAgent 正在结合设备图片、型号与用户描述，先把“看见了什么”整理清楚，不急着给出未经验证的结论。</p>
+                  <div class="fix-next-action">
+                    <small>接下来</small>
+                    <strong data-fix-action>核对产品资料、售后 SOP 与同型号故障记录</strong>
+                  </div>
+                  <div class="fix-safety"><span aria-hidden="true">!</span><p><strong>安全边界</strong>涉及拆机、高压、冒烟、鼓包或裸露电路时，立即停止操作并转专业人员。</p></div>
+                </div>
+
+                <div class="fix-device-column">
+                  <div class="fix-device-visual" role="img" aria-label="用户上传的智能设备示意图，设备电源灯正常但故障灯连续闪红三次">
+                    <span class="fix-photo-label">用户上传设备照片 · 模拟</span>
+                    <div class="fix-device" aria-hidden="true">
+                      <div class="device-lens"></div>
+                      <div class="device-slot"></div>
+                      <div class="device-light power"></div>
+                      <div class="device-light fault"></div>
+                      <span class="fix-scan-line"></span>
+                    </div>
+                    <div class="fix-detected-tag"><i></i><span data-fix-signal>已读取：红灯连续闪烁 3 次</span></div>
+                  </div>
+                  <div class="fix-evidence">
+                    <span><small>型号</small><strong>HX-24</strong></span>
+                    <span><small>电源灯</small><strong>正常</strong></span>
+                    <span><small>故障灯</small><strong>闪红 × 3</strong></span>
+                  </div>
+                </div>
+              </div>
+
+              <span class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-fix-status>当前演示步骤 1：看懂设备。识别到故障灯连续闪红 3 次。接下来：核对产品资料、售后 SOP 与同型号故障记录。</span>
+            </div>
+          </div>
+
+          <div class="fixagent-capabilities">
+            <article class="reveal"><span>01</span><h3>多模态故障理解</h3><p>结合设备照片、报错码、指示灯、型号与用户描述理解故障现场。</p></article>
+            <article class="reveal delay-1"><span>02</span><h3>动态诊断路径</h3><p>不照搬固定 FAQ，根据每一步测试结果调整下一项排查动作。</p></article>
+            <article class="reveal"><span>03</span><h3>产品知识约束</h3><p>让判断受说明书、维修规范和售后 SOP 约束；证据不足时主动补问。</p></article>
+            <article class="reveal delay-1"><span>04</span><h3>工单与人工接管</h3><p>汇总症状、图片、已做测试、结果与建议动作，人工接手无需从头问起。</p></article>
+          </div>
+
+          <p class="fixagent-disclaimer reveal">FixAgent 用于辅助售后诊断与信息整理，不替代需要现场检测的专业维修判断。</p>
+        </div>
+      </section>
+
+      <section class="section skill-section" id="skills">
+        <div class="section-glow"></div>
+        <div class="shell">
+          <div class="section-heading centered reveal">
+            <span class="kicker">BUILD YOUR AGENT</span>
+            <h2>如何用 Skill 组装<br class="mobile-only" />店铺专属 Agent？<span class="spark">✦</span></h2>
+            <p>无需代码。把团队经验、业务规则与实时数据，组装成能真正完成任务的智能能力。</p>
+          </div>
+
+          <div class="skill-roadmap">
+            <div class="road-line" aria-hidden="true"><span></span></div>
+
+            <article class="skill-step reveal">
+              <div class="step-copy">
+                <span class="step-number">01</span>
+                <h3><span>Skill 商店</span>，开箱即用</h3>
+                <p>从商品推荐、物流查询到售后处理，精选电商 Skill 一键启用，快速覆盖高频工作。</p>
+                <ul class="check-list">
+                  <li>无需搭建复杂流程</li>
+                  <li>按平台与场景灵活组合</li>
+                </ul>
+              </div>
+              <div class="step-visual skill-market" aria-hidden="true">
+                <div class="visual-topbar"><i></i><i></i><i></i><span>Skill Market</span></div>
+                <div class="market-grid">
+                  <div class="market-card featured"><b>↗</b><span>智能推荐</span><small>提升咨询转化</small></div>
+                  <div class="market-card"><b>⌁</b><span>物流追踪</span><small>实时查询运单</small></div>
+                  <div class="market-card"><b>◎</b><span>评价洞察</span><small>识别风险情绪</small></div>
+                  <div class="market-card"><b>✦</b><span>自动跟单</span><small>持续触达买家</small></div>
+                </div>
+                <div class="install-toast"><span>✓</span>「物流追踪」已安装</div>
+              </div>
+            </article>
+
+            <article class="skill-step reverse reveal">
+              <div class="step-copy">
+                <span class="step-number">02</span>
+                <h3><span>智能提取</span>，让经验变成能力</h3>
+                <p>上传产品资料、服务 SOP 与店铺规则，Agent 自动理解内容并生成适配业务的专属 Skill。</p>
+                <ul class="check-list">
+                  <li>支持文档、表格与网页资料</li>
+                  <li>自动识别规则、例外与边界</li>
+                </ul>
+              </div>
+              <div class="step-visual extract-visual" aria-hidden="true">
+                <div class="doc-card doc-back"><span>Shipping SOP</span><i></i><i></i><i></i></div>
+                <div class="doc-card doc-front">
+                  <span class="doc-icon">DOC</span>
+                  <strong>全球售后处理规范.pdf</strong>
+                  <small>正在提取服务流程…</small>
+                  <div class="progress"><span></span></div>
+                </div>
+                <div class="extract-output">
+                  <span class="output-icon">✦</span>
+                  <div><small>已生成 Skill</small><strong>退换货处理助手</strong></div>
+                  <b>模拟</b>
+                </div>
+              </div>
+            </article>
+
+            <article class="skill-step reveal">
+              <div class="step-copy">
+                <span class="step-number">03</span>
+                <h3><span>持续进化</span>，每天更懂你的生意</h3>
+                <p>从优质会话与人工处理结果中持续学习，自动发现知识缺口，让每次解决都沉淀为下一次的能力。</p>
+                <ul class="check-list">
+                  <li>优质经验自动沉淀</li>
+                  <li>风险内容进入人工审核</li>
+                </ul>
+              </div>
+              <div class="step-visual evolve-visual" aria-hidden="true">
+                <div class="evolve-ring ring-a"></div><div class="evolve-ring ring-b"></div>
+                <div class="evolve-core"><span>✦</span><strong>持续学习</strong><small>Knowledge loop</small></div>
+                <div class="data-node node-a"><i></i>优质会话</div>
+                <div class="data-node node-b"><i></i>人工反馈</div>
+                <div class="data-node node-c"><i></i>业务结果</div>
+                <div class="evolve-badge">示例 · +32 条新经验</div>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section agent-section" id="agents">
+        <div class="shell">
+          <div class="section-heading split-heading reveal">
+            <div>
+              <span class="kicker">MULTI-AGENT SYSTEM</span>
+              <h2>以 FixAgent 为核心，<br />能力继续延伸到经营</h2>
+            </div>
+            <p>先把复杂的硬件售后诊断做深，再用其他 Agent 连接经营、服务与增长，让问题从发现一路走到执行。</p>
+          </div>
+
+          <article class="agent-showcase business-showcase reveal">
+            <div class="agent-copy">
+              <span class="agent-tag"><i></i> 生意参谋 AGENT</span>
+              <h3>看见经营全貌，<br />找到下一步增长</h3>
+              <p>连接店铺、商品与服务数据，用自然语言洞察异常、解释原因，并给出可以立即执行的建议。</p>
+              <div class="agent-pills" role="group" aria-label="切换生意参谋能力演示">
+                <button class="active" type="button" aria-pressed="true" data-business-tab="insight">经营洞察</button>
+                <button type="button" aria-pressed="false" data-business-tab="risk">风险预警</button>
+                <button type="button" aria-pressed="false" data-business-tab="growth">增长建议</button>
+              </div>
+            </div>
+
+            <div class="dashboard-window" role="img" aria-label="经营 Agent 汇总销售额、咨询转化与退款率的模拟产品界面，所有数据均为示例">
+              <div class="window-chrome"><div><i></i><i></i><i></i></div><span>Solve Agent Console · DEMO</span><b>•••</b></div>
+              <div class="dashboard-layout">
+                <aside class="dash-sidebar">
+                  <span class="mini-logo">S</span>
+                  <i class="active"></i><i></i><i></i><i></i><i></i>
+                </aside>
+                <div class="dash-main">
+                  <div class="dash-welcome"><small>早上好，Mia</small><strong data-business-title>本周生意，有哪些值得关注？</strong></div>
+                  <div class="stat-row">
+                    <div><small>销售额</small><strong>$128,420</strong><span>↗ 18.2%</span></div>
+                    <div><small>咨询转化</small><strong>34.8%</strong><span>↗ 6.4%</span></div>
+                    <div><small>退款率</small><strong>2.16%</strong><span class="warn">↗ 0.8%</span></div>
+                  </div>
+                  <div class="chart-card">
+                    <div class="chart-head"><div><small>经营趋势</small><strong>订单与服务表现</strong></div><span>最近 7 天⌄</span></div>
+                    <svg class="line-chart" viewBox="0 0 620 180" preserveAspectRatio="none" aria-hidden="true">
+                      <defs>
+                        <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stop-color="#716cff" stop-opacity=".38" />
+                          <stop offset="1" stop-color="#716cff" stop-opacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <path class="grid-line" d="M0 30H620M0 75H620M0 120H620M0 165H620" />
+                      <path class="area" d="M0 155 C70 138,90 104,145 112 S220 68,285 88 S385 40,435 60 S535 20,620 35 V180H0Z" />
+                      <path class="trend" d="M0 155 C70 138,90 104,145 112 S220 68,285 88 S385 40,435 60 S535 20,620 35" />
+                    </svg>
+                  </div>
+                  <div class="insight-note"><span class="insight-icon">✦</span><p data-business-note><strong>Agent 发现</strong>巴西站点转化率增长 12%，来自新品推荐策略的优化。</p><span class="insight-link">示例详情 →</span></div>
+                </div>
+              </div>
+            </div>
+            <span class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-business-status>当前演示：经营洞察。本周生意，有哪些值得关注？</span>
+          </article>
+
+          <article class="agent-showcase marketing-showcase reveal">
+            <div class="marketing-visual" role="img" aria-label="营销 Agent 从弃单触发、判断意向到发送提醒的模拟自动化流程">
+              <div class="flow-head"><span>自动化流程</span><strong>弃单挽回 · 全天运行中</strong><i>LIVE</i></div>
+              <div class="flow-canvas">
+                <div class="flow-line line-one"></div><div class="flow-line line-two"></div><div class="flow-line line-three"></div>
+                <div class="flow-node node-start"><span>⚡</span><div><small>触发条件</small><strong>买家加购未付款</strong></div></div>
+                <div class="flow-node node-ai"><span>✦</span><div><small>Solve Agent</small><strong>判断购买意向</strong></div><b>AI</b></div>
+                <div class="flow-node node-msg"><span>↗</span><div><small>执行动作</small><strong>发送个性化提醒</strong></div></div>
+                <div class="flow-node node-end"><span>✓</span><div><small>转化结果</small><strong>订单已完成</strong></div></div>
+                <div class="flow-result"><small>示例 · 本月自动挽回</small><strong>286</strong><span>个订单</span></div>
+              </div>
+            </div>
+
+            <div class="agent-copy marketing-copy">
+              <span class="agent-tag coral"><i></i> 营销增长 AGENT</span>
+              <h3>识别顾客意向，<br />让转化自动发生</h3>
+              <p>从咨询到复购，Agent 主动发现机会、选择策略并执行触达，让增长不再依赖手工跟进。</p>
+              <div class="mini-features">
+                <div><span>01</span><p><strong>促进成交</strong><small>智能推荐商品，引导买家下单</small></p></div>
+                <div><span>02</span><p><strong>挽回流失</strong><small>催付、弃单挽回与潜客跟进</small></p></div>
+                <div><span>03</span><p><strong>激活复购</strong><small>邀评、关怀与老客唤醒</small></p></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="section feature-section" id="features">
+        <div class="shell">
+          <div class="section-heading centered reveal">
+            <span class="kicker">MORE POWER, LESS BUSYWORK</span>
+            <h2>更多特色功能，<br class="mobile-only" />满足每一种经营需求</h2>
+            <p>一个工作台，连接服务、协作与增长中的关键动作。以下均为模拟界面与示例数据。</p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-card feature-wide reminder-card reveal">
+              <div class="feature-copy"><span class="feature-icon">◉</span><h3>重点提醒</h3><p>识别高价值买家、负面情绪与高风险会话，重要的事不再被消息淹没。</p></div>
+              <div class="conversation-stack" aria-hidden="true">
+                <div class="conversation"><span class="buyer pink">E</span><p><strong>Elena M.</strong><small>订单金额 $568 · 情绪异常</small></p><b>高价值</b></div>
+                <div class="conversation active"><span class="buyer blue">R</span><p><strong>Rafael S.</strong><small>请求退款 · 已等待 8 分钟</small></p><b>需跟进</b></div>
+                <div class="conversation"><span class="buyer green">A</span><p><strong>Aisha K.</strong><small>连续咨询 3 次</small></p><b>重点</b></div>
+              </div>
+            </article>
+
+            <article class="feature-card broadcast-card reveal delay-1">
+              <div class="feature-copy"><span class="feature-icon">↗</span><h3>消息群发</h3><p>根据买家标签，批量发送个性化店铺消息。</p></div>
+              <div class="broadcast-art" aria-hidden="true"><span class="send-plane">➤</span><i class="wave w1"></i><i class="wave w2"></i><i class="wave w3"></i><b>12,680</b><small>示例 · 买家已触达</small></div>
+            </article>
+
+            <article class="feature-card logistics-card reveal">
+              <div class="feature-copy"><span class="feature-icon">⌁</span><h3>物流查询</h3><p>连接平台与承运商，实时查询物流节点与异常状态。</p></div>
+              <div class="route-art" aria-hidden="true">
+                <div class="map-lines"></div><span class="pin p1">1</span><span class="pin p2">2</span><span class="pin p3">✓</span>
+                <div class="parcel-status"><i></i><p><small>包裹状态</small><strong>正在派送</strong></p><span>09:42</span></div>
+              </div>
+            </article>
+
+            <article class="feature-card feature-wide aftersales-card reveal delay-1">
+              <div class="feature-copy"><span class="feature-icon">↻</span><h3>故障工单闭环</h3><p>自动汇总症状、设备证据、诊断过程与建议动作，人工接手无需从头询问。</p></div>
+              <div class="aftersales-board" aria-hidden="true">
+                <div><small>待处理</small><strong>12</strong><span class="bar b1"></span></div>
+                <div><small>Agent 处理中</small><strong>38</strong><span class="bar b2"></span></div>
+                <div><small>今日已解决</small><strong>186</strong><span class="bar b3"></span></div>
+              </div>
+            </article>
+
+            <article class="feature-card tickets-card reveal">
+              <div class="feature-copy"><span class="feature-icon">▣</span><h3>工单协作</h3><p>复杂事项自动流转，进度与责任人实时可见。</p></div>
+              <div class="ticket-art" aria-hidden="true"><div class="ticket t3"></div><div class="ticket t2"></div><div class="ticket t1"><small>#SK-2841</small><strong>高优先级售后处理</strong><span><i>M</i><b>处理中</b></span></div></div>
+            </article>
+
+            <article class="feature-card review-card reveal delay-1">
+              <div class="feature-copy"><span class="feature-icon">✦</span><h3>评价洞察</h3><p>识别好评中的隐性问题，也不错过真正的口碑信号。</p></div>
+              <div class="review-art" aria-hidden="true"><div class="stars-row">★★★★★</div><p>“包装很好，但电池续航比预期短……”</p><span><i></i> Agent 识别：产品体验风险</span></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section story-section" id="stories">
+        <div class="shell">
+          <div class="section-heading centered reveal">
+            <span class="kicker">INDUSTRY SCENARIOS</span>
+            <h2>不同行业，都能组装自己的<br />Solve Agent</h2>
+          </div>
+
+          <div class="story-shell reveal">
+            <div class="story-main">
+              <span class="quote-mark">“</span>
+              <blockquote data-story-quote>面对“设备无法启动”这类问题，FixAgent 会先看设备照片与指示灯状态，再引导用户做安全测试，并根据结果继续缩小故障范围。</blockquote>
+              <div class="story-person">
+                <span class="story-avatar" data-story-avatar>3C</span>
+                <p><strong data-story-name>消费电子售后团队</strong><small data-story-role>典型应用场景 · 非客户背书</small></p>
+              </div>
+            </div>
+            <div class="story-metric">
+              <small>场景目标</small>
+              <strong data-story-metric>连续诊断</strong>
+              <span data-story-label>从设备照片走到解决方案或完整工单</span>
+              <div class="metric-ring"><i></i></div>
+            </div>
+            <span class="sr-only" role="status" aria-live="polite" aria-atomic="true" data-story-status>当前示例场景：消费电子售后团队，从设备照片走到解决方案或完整工单。</span>
+          </div>
+
+          <div class="story-tabs" role="group" aria-label="切换典型应用场景">
+            <button class="active" type="button" aria-pressed="true" data-story="0"><span>消费电子</span><small>硬件故障诊断</small></button>
+            <button type="button" aria-pressed="false" data-story="1"><span>美妆个护</span><small>个性化推荐</small></button>
+            <button type="button" aria-pressed="false" data-story="2"><span>家居生活</span><small>经营洞察</small></button>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-section" id="contact">
+        <div class="cta-grid" aria-hidden="true"></div>
+        <div class="cta-orb orb-left" aria-hidden="true"></div>
+        <div class="cta-orb orb-right" aria-hidden="true"></div>
+        <div class="shell cta-content reveal">
+          <span class="kicker">TRY FIXAGENT</span>
+          <h2>给 FixAgent 一个真实故障，<br />看它如何一步步诊断</h2>
+          <p>用设备照片与故障描述，体验从初步判断、测试引导到售后工单的完整流程。</p>
+          <div class="cta-actions">
+            <button class="button button-primary large" type="button" data-demo-open>预约故障诊断演示 <span>↗</span></button>
+            <button class="button button-light large" type="button" data-demo-open>申请接入试用</button>
+          </div>
+          <small class="cta-note">原型展示 · 表单不会保存或发送任何数据</small>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="shell footer-grid">
+        <div class="footer-brand">
+          <a class="brand" href="#top" aria-label="Solve Agent 首页">
+            <span class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 40 40" fill="none"><path d="M9 13.5c2.8-4.4 7-6.5 12.6-6.5 5.8 0 9.6 2.3 9.6 6.2 0 3.2-2.5 4.7-7.6 5.8l-7.1 1.6c-5 1.1-7.6 3.7-7.6 7.2 0 4.4 4 7.2 10.6 7.2 5.9 0 10.3-2.1 13.1-6.4" /></svg>
+            </span>
+            <span class="brand-copy"><strong>Solve</strong><small>AGENT</small></span>
+          </a>
+          <p>以 FixAgent 为核心的<br />硬件售后诊断与经营 Agent。</p>
+          <span class="email-link">商务邮箱 · 待配置</span>
+        </div>
+        <div class="footer-column"><h3>产品</h3><a href="#fixagent">FixAgent</a><a href="#skills">Skill 商店</a><a href="#agents">Agent 能力</a><a href="#features">特色功能</a><a href="#stories">行业场景</a></div>
+        <div class="footer-column"><h3>资源</h3><span>帮助中心 · 待配置</span><span>开发者文档 · 待配置</span><span>产品更新 · 待配置</span><span>博客 · 待配置</span></div>
+        <div class="footer-column"><h3>公司</h3><span>关于我们 · 待配置</span><span>加入我们 · 待配置</span><span>隐私政策 · 待配置</span><span>使用条款 · 待配置</span></div>
+      </div>
+      <div class="shell footer-disclaimer">本页面为 Solve Agent 品牌原型。界面、功能与数据均为模拟示意；FixAgent 用于辅助售后诊断与信息整理，不替代需要现场检测的专业维修判断。正式发布前请补充真实公司主体、隐私政策、使用条款与已验证的产品能力。</div>
+      <div class="shell footer-bottom"><span>© 2026 Solve Agent prototype.</span><span>Built for global commerce <i>✦</i></span></div>
+    </footer>
+
+    <dialog class="demo-dialog" aria-labelledby="demo-dialog-title" aria-describedby="demo-dialog-description" data-demo-dialog>
+      <button class="dialog-close" type="button" aria-label="关闭" data-demo-close>×</button>
+      <div class="dialog-icon">✦</div>
+      <span class="kicker">BOOK A DEMO</span>
+      <h2 id="demo-dialog-title">看看 FixAgent 如何诊断你的产品</h2>
+      <p id="demo-dialog-description">填写一份预约信息，预览 FixAgent 的诊断演示流程。此原型不会保存或发送数据。</p>
+      <form data-demo-form>
+        <label>工作邮箱（必填）<input type="email" name="email" autocomplete="email" placeholder="name@company.com" required /></label>
+        <label>团队规模（必填）<select name="team_size" required><option value="">请选择</option><option>1–10 人</option><option>11–50 人</option><option>51–200 人</option><option>200 人以上</option></select></label>
+        <button class="button button-primary" type="submit">查看提交效果 <span>↗</span></button>
+      </form>
+      <div class="form-success" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" data-form-success><span>✓</span><strong>原型提交效果</strong><small>信息未保存，也未发送到任何服务。</small></div>
+    </dialog>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
