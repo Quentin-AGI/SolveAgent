@@ -4,6 +4,12 @@ Solve Agent 品牌官网，以 **FixAgent｜Hardware Doctor** 为核心产品，
 
 网站包含动态能力卡片、量子粒子波面和 FixAgent 五步诊断交互演示，并适配桌面、平板与移动端。
 
+## 在线访问
+
+生产站点：<https://solveagent.vercel.app>
+
+`main` 分支的后续推送会由 Vercel 自动构建并发布。
+
 ## 本地运行
 
 ```bash
