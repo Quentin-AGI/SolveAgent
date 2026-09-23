@@ -6,7 +6,9 @@ The current slice provides:
 
 - a TypeScript `@anthropic-ai/claude-agent-sdk` Runtime;
 - one isolated Case Workspace Root used as Agent `cwd`, with a read-only native project Skill, Scratch-only writes, a per-Case home, and a private host-side Trace;
-- one short-lived OS Worker process dedicated to each Case run, with an allowlisted provider environment;
+- one short-lived OS Worker process dedicated to each Case run, with an allowlisted provider environment and an exclusive Case Worker Lease;
+- a revision-checked, append-only Case event store with atomic state projections, per-write idempotency keys, restart recovery, and same-Case Claude Agent SDK Session resume;
+- exact completed-turn and crash-window replay for duplicate request keys, Worker fencing on every state write, a frozen non-secret provider profile fingerprint (including credential type, model tiers, capabilities, SDK and expected Claude Code identity), and one automatic same-profile recovery after a recorded `SYSTEM_ERROR`;
 - an in-process `publish_case_response` MCP tool as the only user-visible response path;
 - a minimal Case conversation UI carrying the mandatory `NON-SCORED · DATA_NO_GO` status;
 - startup checks for native Bash, Read, Edit, Write, the core Skill, and the SDK MCP server;
@@ -14,7 +16,7 @@ The current slice provides:
 - a deterministic pre-Agent text Safety Gate that emits only the frozen fallback sentence and atomically creates a clearly labelled simulated `SAFETY_HANDOFF`.
 - seven-day raw Trace expiry with an operational alert if deletion fails; report-freeze deletion will be added with the reporting subsystem.
 
-It does not yet implement persistent Case State, same-Case SDK Session resume and Worker Leases, Knowledge retrieval, image ingestion, Action Cards, vision and in-session Safety signals, ordinary Handoff, Evidence Broker, or provider certification. It is an architecture-validation slice and must not be used for live device troubleshooting.
+It does not yet implement Knowledge retrieval, image ingestion, Action Cards, vision and in-session Safety signals, ordinary Handoff, Evidence Broker, or provider certification. It is an architecture-validation slice and must not be used for live device troubleshooting.
 
 ## Install and verify
 

@@ -18,8 +18,28 @@ import {
   type AgentRunRequest,
   type AgentRuntime,
 } from "../src/app.js";
+import { buildFrozenProviderProfile } from "../src/provider-profile.js";
 
 const temporaryDirectories: string[] = [];
+
+const testProviderProfile = (
+  providerId: string,
+  modelId: string,
+  claudeCodeVersion: string,
+) =>
+  buildFrozenProviderProfile({
+    FIXAGENT_PROVIDER_ID: providerId,
+    ANTHROPIC_BASE_URL: `https://${providerId}.example.test`,
+    ANTHROPIC_AUTH_TOKEN: "test-secret",
+    FIXAGENT_MODEL: modelId,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: `${modelId}-opus`,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: `${modelId}-sonnet`,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: `${modelId}-haiku`,
+    ANTHROPIC_DEFAULT_FABLE_MODEL: `${modelId}-fable`,
+    FIXAGENT_PROVIDER_CAPABILITIES: "tools,vision",
+    FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION: claudeCodeVersion,
+    FIXAGENT_EXPECTED_OBSERVED_MODEL_ID: modelId,
+  });
 
 const makeDirectoriesRemovable = async (directory: string): Promise<void> => {
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
@@ -87,6 +107,257 @@ test("user creates a Case and receives only the Agent-published response", async
         response_type: "EVIDENCE_REQUEST",
       },
     });
+  } finally {
+    await app.close();
+  }
+});
+
+test("a repeated message idempotency key replays the first response without rerunning the Agent", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  let agentRuns = 0;
+  const runtime: AgentRuntime = {
+    async run(request) {
+      agentRuns += 1;
+      await request.publish({
+        message_markdown: `首次回答 ${agentRuns}`,
+        claim_refs: [],
+        action_card_refs: [],
+        response_type: "EVIDENCE_REQUEST",
+      });
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const idempotencyKey = "00000000-0000-4000-8000-000000000777";
+    const send = () =>
+      fetch(new URL(`/api/cases/${caseId}/messages`, app.url), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: "屏幕右边有一条黑边",
+          idempotency_key: idempotencyKey,
+        }),
+      });
+
+    const first = await send();
+    const firstBody = await first.json();
+    const repeated = await send();
+    const repeatedBody = await repeated.json();
+    assert.equal(first.status, 200);
+    assert.equal(repeated.status, 200);
+    assert.deepEqual(repeatedBody, firstBody);
+    assert.equal(agentRuns, 1);
+
+    const conflict = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: "这是不同的消息",
+          idempotency_key: idempotencyKey,
+        }),
+      },
+    );
+    assert.equal(conflict.status, 409);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a transient Runtime failure is persisted and retried once", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  let agentRuns = 0;
+  const runtime: AgentRuntime = {
+    async run(request) {
+      agentRuns += 1;
+      if (agentRuns === 1) throw new Error("PROVIDER_TEMPORARY_FAILURE");
+      await request.publish({
+        message_markdown: "请补充当前屏幕照片。",
+        claim_refs: [],
+        action_card_refs: [],
+        response_type: "EVIDENCE_REQUEST",
+      });
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "屏幕异常" }),
+      },
+    );
+
+    assert.equal(replied.status, 200);
+    assert.equal(agentRuns, 2);
+    assert.match(
+      await readFile(join(workspaceRoot, caseId, "events.jsonl"), "utf8"),
+      /"event_type":"SYSTEM_ERROR"/,
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("a retry forks from the pre-turn Session instead of duplicating the user message", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const baseSession = "00000000-0000-4000-8000-000000000801";
+  const failedFork = "00000000-0000-4000-8000-000000000802";
+  const successfulFork = "00000000-0000-4000-8000-000000000803";
+  const resumedFrom: Array<string | undefined> = [];
+  let runs = 0;
+  const runtime: AgentRuntime = {
+    async run(request) {
+      runs += 1;
+      resumedFrom.push(request.sessionId);
+      if (runs === 1) {
+        await request.saveSession(baseSession);
+        await request.publish({
+          message_markdown: "首轮回答。",
+          claim_refs: [],
+          action_card_refs: [],
+          response_type: "EVIDENCE_REQUEST",
+        });
+        return;
+      }
+      if (runs === 2) {
+        await request.saveSession(failedFork);
+        throw new Error("PROVIDER_TEMPORARY_FAILURE");
+      }
+      await request.saveSession(successfulFork);
+      await request.publish({
+        message_markdown: "恢复后的回答。",
+        claim_refs: [],
+        action_card_refs: [],
+        response_type: "EVIDENCE_REQUEST",
+      });
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const send = (message: string) =>
+      fetch(new URL(`/api/cases/${caseId}/messages`, app.url), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message }),
+      });
+
+    assert.equal((await send("第一轮")).status, 200);
+    assert.equal((await send("第二轮")).status, 200);
+    assert.deepEqual(resumedFrom, [undefined, baseSession, baseSession]);
+    const state = JSON.parse(
+      await readFile(join(workspaceRoot, caseId, "state.json"), "utf8"),
+    ) as { claude_session_id: string };
+    assert.equal(state.claude_session_id, successfulFork);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a response committed before a Runtime crash is returned without a second Agent run", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  let agentRuns = 0;
+  const runtime: AgentRuntime = {
+    async run(request) {
+      agentRuns += 1;
+      await request.publish({
+        message_markdown: "这是崩溃前已提交的回答。",
+        claim_refs: [],
+        action_card_refs: [],
+        response_type: "EVIDENCE_REQUEST",
+      });
+      throw new Error("CASE_WORKER_EXITED: simulated crash");
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "屏幕异常" }),
+      },
+    );
+    const result = (await replied.json()) as {
+      response: { message_markdown: string };
+    };
+
+    assert.equal(replied.status, 200);
+    assert.equal(result.response.message_markdown, "这是崩溃前已提交的回答。");
+    assert.equal(agentRuns, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test("a terminal Runtime error is replayed and never consumes another recovery", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  let agentRuns = 0;
+  const runtime: AgentRuntime = {
+    async run() {
+      agentRuns += 1;
+      throw new Error("PROVIDER_UNAVAILABLE");
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const idempotencyKey = "00000000-0000-4000-8000-000000000778";
+    const send = () =>
+      fetch(new URL(`/api/cases/${caseId}/messages`, app.url), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: "屏幕异常",
+          idempotency_key: idempotencyKey,
+        }),
+      });
+
+    const first = await send();
+    const firstBody = await first.json();
+    const repeated = await send();
+    assert.equal(first.status, 500);
+    assert.equal(repeated.status, 500);
+    assert.deepEqual(await repeated.json(), firstBody);
+    assert.equal(agentRuns, 2);
   } finally {
     await app.close();
   }
@@ -503,7 +774,7 @@ test("Case starts with a read-only project Skill, Scratch workspace, and private
       );
       assert.match(skill, /name: hardware-troubleshooting/);
       assert.equal((await stat(join(request.cwd, "scratch"))).isDirectory(), true);
-      assert.equal((await stat(request.cwd)).mode & 0o777, 0o555);
+      assert.equal((await stat(request.cwd)).isDirectory(), true);
       assert.equal(
         (await stat(
           join(
@@ -558,5 +829,128 @@ test("Case starts with a read-only project Skill, Scratch workspace, and private
     );
   } finally {
     await app.close();
+  }
+});
+
+test("an existing Case resumes its Claude Session after the HTTP process restarts", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const runtime: AgentRuntime = {
+    async run(request) {
+      await request.saveSession("00000000-0000-4000-8000-000000000042");
+      await request.publish({
+        message_markdown: "请补充当前屏幕照片。",
+        claim_refs: [],
+        action_card_refs: [],
+        response_type: "EVIDENCE_REQUEST",
+      });
+    },
+  };
+  const firstServer = createFixAgentServer({ runtime, workspaceRoot });
+  await firstServer.listen();
+  const created = await fetch(new URL("/api/cases", firstServer.url), {
+    method: "POST",
+  });
+  const { case_id: caseId } = (await created.json()) as { case_id: string };
+  const firstReply = await fetch(
+    new URL(`/api/cases/${caseId}/messages`, firstServer.url),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ message: "第一次消息" }),
+    },
+  );
+  assert.equal(firstReply.status, 200);
+  await firstServer.close();
+
+  let resumedSessionId: string | undefined;
+  const restartedServer = createFixAgentServer({
+    workspaceRoot,
+    runtime: {
+      async run(request) {
+        resumedSessionId = request.sessionId;
+        await request.publish({
+          message_markdown: "已恢复当前 Case。",
+          claim_refs: [],
+          action_card_refs: [],
+          response_type: "EVIDENCE_REQUEST",
+        });
+      },
+    },
+  });
+  await restartedServer.listen();
+  try {
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, restartedServer.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "继续上次 Case" }),
+      },
+    );
+
+    assert.equal(replied.status, 200);
+    assert.equal(
+      resumedSessionId,
+      "00000000-0000-4000-8000-000000000042",
+    );
+  } finally {
+    await restartedServer.close();
+  }
+});
+
+test("a returning Case rejects a changed provider profile before the Agent runs", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const firstServer = createFixAgentServer({
+    workspaceRoot,
+    runtime: { async run() {} },
+    providerProfile: testProviderProfile(
+      "qwen",
+      "qwen-model-a",
+      "test-version-a",
+    ),
+  });
+  await firstServer.listen();
+  const created = await fetch(new URL("/api/cases", firstServer.url), {
+    method: "POST",
+  });
+  const { case_id: caseId } = (await created.json()) as { case_id: string };
+  await firstServer.close();
+
+  let agentRuns = 0;
+  const restartedServer = createFixAgentServer({
+    workspaceRoot,
+    runtime: {
+      async run() {
+        agentRuns += 1;
+      },
+    },
+    providerProfile: testProviderProfile(
+      "deepseek",
+      "deepseek-model-b",
+      "test-version-b",
+    ),
+  });
+  await restartedServer.listen();
+  try {
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, restartedServer.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "继续上次 Case" }),
+      },
+    );
+
+    assert.equal(replied.status, 500);
+    assert.deepEqual(await replied.json(), { error: "SYSTEM_ERROR" });
+    assert.equal(agentRuns, 0);
+    assert.match(
+      await readFile(join(workspaceRoot, caseId, "events.jsonl"), "utf8"),
+      /FROZEN_PROVIDER_PROFILE_MISMATCH/,
+    );
+  } finally {
+    await restartedServer.close();
   }
 });

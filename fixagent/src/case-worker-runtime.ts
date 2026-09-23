@@ -4,17 +4,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { AgentRunRequest, AgentRuntime } from "./app.js";
-
-const providerEnvironmentKeys = [
-  "ANTHROPIC_BASE_URL",
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_MODEL",
-  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-  "ANTHROPIC_DEFAULT_SONNET_MODEL",
-  "ANTHROPIC_DEFAULT_OPUS_MODEL",
-  "FIXAGENT_MODEL",
-] as const;
+import {
+  providerRuntimeEnvironmentKeys,
+  selectProviderCredentials,
+} from "./provider-profile.js";
 
 export const buildCaseWorkerEnvironment = (
   source: NodeJS.ProcessEnv,
@@ -37,9 +30,10 @@ export const buildCaseWorkerEnvironment = (
     FIXAGENT_CASES_ROOT: dirname(caseWorkspaceRoot),
   };
 
-  for (const key of providerEnvironmentKeys) {
+  for (const key of providerRuntimeEnvironmentKeys) {
     environment[key] = source[key];
   }
+  Object.assign(environment, selectProviderCredentials(source));
 
   return environment;
 };
@@ -47,6 +41,7 @@ export const buildCaseWorkerEnvironment = (
 type ParentMessage =
   | { type: "publish"; requestId: string; payload: unknown }
   | { type: "trace"; requestId: string; payload: unknown }
+  | { type: "session"; requestId: string; payload: string }
   | { type: "complete" }
   | { type: "error"; message: string };
 
@@ -97,12 +92,18 @@ export const createCaseWorkerRuntime = (): AgentRuntime => ({
         messageQueue = messageQueue
           .then(async () => {
             const message = untrustedMessage as ParentMessage;
-            if (message.type === "publish" || message.type === "trace") {
+            if (
+              message.type === "publish" ||
+              message.type === "trace" ||
+              message.type === "session"
+            ) {
               try {
                 if (message.type === "publish") {
                   await request.publish(message.payload);
-                } else {
+                } else if (message.type === "trace") {
                   await request.trace(message.payload);
+                } else {
+                  await request.saveSession(message.payload);
                 }
                 await send(worker, {
                   type: "ack",
@@ -157,6 +158,7 @@ export const createCaseWorkerRuntime = (): AgentRuntime => ({
         caseId: request.caseId,
         cwd: request.cwd,
         userMessage: request.userMessage,
+        ...(request.sessionId ? { sessionId: request.sessionId } : {}),
       }).catch((error: unknown) =>
         settle(() =>
           reject(error instanceof Error ? error : new Error("WORKER_START_FAILED")),

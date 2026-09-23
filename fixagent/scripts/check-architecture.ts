@@ -79,4 +79,16 @@ if (!workerEntry?.source.includes("createClaudeAgentRuntime")) {
   throw new Error("Case Worker does not delegate execution to Claude Agent SDK.");
 }
 
+const providerProfile = imports.find(({ path }) =>
+  path.endsWith("provider-profile.ts"),
+);
+const declaredSdkVersion = providerProfile?.source.match(
+  /CLAUDE_AGENT_SDK_PACKAGE_VERSION = "([^"]+)"/,
+)?.[1];
+if (declaredSdkVersion !== packageJson.dependencies?.["@anthropic-ai/claude-agent-sdk"]) {
+  throw new Error(
+    "Frozen Provider Profile SDK version does not match package.json.",
+  );
+}
+
 console.log("Architecture check passed: Claude Agent SDK is the only model runtime.");

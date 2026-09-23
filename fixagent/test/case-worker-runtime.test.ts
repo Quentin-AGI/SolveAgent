@@ -21,6 +21,7 @@ test("Case Worker receives only the provider profile and required process enviro
 
   assert.equal(environment.ANTHROPIC_BASE_URL, "https://provider.example/anthropic");
   assert.equal(environment.ANTHROPIC_AUTH_TOKEN, "secret");
+  assert.equal(environment.ANTHROPIC_API_KEY, undefined);
   assert.equal(environment.FIXAGENT_MODEL, "provider-model");
   assert.equal(environment.HOME, "/cases/case-123/.home");
   assert.equal(environment.CLAUDE_CONFIG_DIR, "/cases/case-123/.home/.claude");
@@ -30,4 +31,18 @@ test("Case Worker receives only the provider profile and required process enviro
   assert.equal(environment.RANDOM_SERVER_SECRET, undefined);
   assert.equal(environment.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, "1");
   assert.equal(environment.CLAUDE_CODE_SKIP_PROMPT_HISTORY, "1");
+});
+
+test("Case Worker rejects ambiguous provider credential types", () => {
+  assert.throws(
+    () =>
+      buildCaseWorkerEnvironment(
+        {
+          ANTHROPIC_AUTH_TOKEN: "token",
+          ANTHROPIC_API_KEY: "key",
+        },
+        "/cases/case-123",
+      ),
+    /PROVIDER_CREDENTIAL_AMBIGUOUS/,
+  );
 });

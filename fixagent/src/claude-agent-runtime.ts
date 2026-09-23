@@ -11,6 +11,11 @@ import type {
   AgentRuntime,
 } from "./app.js";
 import { publishedCaseResponseShape } from "./published-case-response.js";
+import {
+  normalizedProviderValue,
+  providerRuntimeEnvironmentKeys,
+  selectProviderCredentials,
+} from "./provider-profile.js";
 
 type QueryParameters = Parameters<typeof query>[0];
 type QueryAgent = (parameters: QueryParameters) => AsyncIterable<SDKMessage>;
@@ -28,17 +33,6 @@ This tracer slice has no approved Knowledge or Action Card store. You may only a
 All user-visible diagnostic, explanatory, or operational content must be submitted through mcp__fixagent__publish_case_response.
 Do not rely on ordinary assistant text being shown to the user.`;
 
-const providerEnvironmentKeys = [
-  "ANTHROPIC_BASE_URL",
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-  "ANTHROPIC_MODEL",
-  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
-  "ANTHROPIC_DEFAULT_SONNET_MODEL",
-  "ANTHROPIC_DEFAULT_OPUS_MODEL",
-  "FIXAGENT_MODEL",
-] as const;
-
 const buildAgentEnvironment = (
   source: NodeJS.ProcessEnv,
 ): Record<string, string | undefined> => {
@@ -55,15 +49,17 @@ const buildAgentEnvironment = (
     CLAUDE_CODE_SKIP_PROMPT_HISTORY: "1",
   };
 
-  for (const key of providerEnvironmentKeys) {
+  for (const key of providerRuntimeEnvironmentKeys) {
     environment[key] = source[key];
   }
+  Object.assign(environment, selectProviderCredentials(source));
 
   return environment;
 };
 
 const assertArchitectureInit = (
   message: Extract<SDKMessage, { type: "system"; subtype: "init" }>,
+  environment: NodeJS.ProcessEnv,
 ): void => {
   const requiredTools = ["Bash", "Read", "Edit", "Write"];
   const missingTools = requiredTools.filter(
@@ -76,10 +72,23 @@ const assertArchitectureInit = (
       server.status === "connected" &&
       server.source === "sdk",
   );
+  const expectedClaudeCodeVersion =
+    normalizedProviderValue(environment.FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION);
+  const expectedObservedModelId =
+    normalizedProviderValue(environment.FIXAGENT_EXPECTED_OBSERVED_MODEL_ID) ??
+    normalizedProviderValue(environment.FIXAGENT_MODEL) ??
+    normalizedProviderValue(environment.ANTHROPIC_MODEL);
   const failures = [
     ...missingTools,
     ...(missingSkill ? ["hardware-troubleshooting"] : []),
     ...(fixAgentMcpConnected ? [] : ["fixagent MCP"]),
+    ...(expectedClaudeCodeVersion &&
+    expectedClaudeCodeVersion !== message.claude_code_version
+      ? ["frozen Claude Code version"]
+      : []),
+    ...(expectedObservedModelId && expectedObservedModelId !== message.model
+      ? ["frozen observed model"]
+      : []),
   ];
 
   if (failures.length > 0) {
@@ -122,7 +131,9 @@ export const createClaudeAgentRuntime = ({
 }: CreateClaudeAgentRuntimeOptions = {}): AgentRuntime => ({
   async run(request) {
     const fixagent = createPublishServer(request);
-    const model = environment.FIXAGENT_MODEL;
+    const model =
+      normalizedProviderValue(environment.FIXAGENT_MODEL) ??
+      normalizedProviderValue(environment.ANTHROPIC_MODEL);
     const caseWorkspaceRoot = request.cwd;
     const deniedReadRoots = [
       environment.FIXAGENT_HOST_HOME,
@@ -183,6 +194,9 @@ export const createClaudeAgentRuntime = ({
       },
       maxTurns: 8,
       maxBudgetUsd: 0.5,
+      ...(request.sessionId
+        ? { resume: request.sessionId, forkSession: true }
+        : {}),
       ...(model ? { model } : {}),
     };
 
@@ -194,7 +208,8 @@ export const createClaudeAgentRuntime = ({
     })) {
       await request.trace(message);
       if (message.type === "system" && message.subtype === "init") {
-        assertArchitectureInit(message);
+        assertArchitectureInit(message, environment);
+        await request.saveSession(message.session_id);
         architectureInitSeen = true;
       }
       // SDK output remains internal. Only publish_case_response reaches the UI.

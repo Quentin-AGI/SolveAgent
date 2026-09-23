@@ -35,6 +35,7 @@ const validInitMessage = {
 
 test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent MCP", async () => {
   let captured: Parameters<typeof query>[0] | undefined;
+  let savedSessionId: string | undefined;
 
   const runtime = createClaudeAgentRuntime({
     environment: {
@@ -59,6 +60,9 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
     userMessage: "屏幕右边有黑边",
     async publish() {},
     async trace() {},
+    async saveSession(sessionId) {
+      savedSessionId = sessionId;
+    },
   });
 
   assert.ok(captured);
@@ -95,6 +99,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
   assert.equal(captured.options?.env?.npm_config_registry, undefined);
   assert.equal(captured.options?.env?.FIXAGENT_HOST_HOME, undefined);
   assert.equal(captured.options?.env?.FIXAGENT_CASES_ROOT, undefined);
+  assert.equal(savedSessionId, "00000000-0000-4000-8000-000000000002");
 });
 
 test("Case is rejected when SDK init cannot prove the core Skill is available", async () => {
@@ -117,7 +122,62 @@ test("Case is rejected when SDK init cannot prove the core Skill is available", 
       userMessage: "屏幕右边有黑边",
       async publish() {},
       async trace() {},
+      async saveSession() {},
     }),
     /ARCHITECTURE_GATE_FAILED.*hardware-troubleshooting/,
+  );
+});
+
+test("a returning Case resumes its own Claude Agent SDK Session", async () => {
+  let captured: Parameters<typeof query>[0] | undefined;
+  const runtime = createClaudeAgentRuntime({
+    environment: {},
+    queryAgent(parameters) {
+      captured = parameters;
+      return (async function* (): AsyncGenerator<SDKMessage> {
+        yield validInitMessage;
+      })();
+    },
+  });
+
+  await runtime.run({
+    caseId: "case-123",
+    cwd: "/isolated/cases/case-123",
+    userMessage: "继续",
+    sessionId: "00000000-0000-4000-8000-000000000099",
+    async publish() {},
+    async trace() {},
+    async saveSession() {},
+  });
+
+  assert.equal(
+    captured?.options?.resume,
+    "00000000-0000-4000-8000-000000000099",
+  );
+  assert.equal(captured?.options?.forkSession, true);
+});
+
+test("Case is rejected when observed model differs from the Frozen Provider Profile", async () => {
+  const runtime = createClaudeAgentRuntime({
+    environment: {
+      FIXAGENT_EXPECTED_OBSERVED_MODEL_ID: "expected-model",
+    },
+    queryAgent() {
+      return (async function* (): AsyncGenerator<SDKMessage> {
+        yield validInitMessage;
+      })();
+    },
+  });
+
+  await assert.rejects(
+    runtime.run({
+      caseId: "case-123",
+      cwd: "/isolated/cases/case-123",
+      userMessage: "继续",
+      async publish() {},
+      async trace() {},
+      async saveSession() {},
+    }),
+    /ARCHITECTURE_GATE_FAILED.*frozen observed model/,
   );
 });

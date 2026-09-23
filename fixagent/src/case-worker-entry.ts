@@ -7,6 +7,7 @@ interface RunMessage {
   caseId: string;
   cwd: string;
   userMessage: string;
+  sessionId?: string;
 }
 
 interface AckMessage {
@@ -27,7 +28,7 @@ const sendToParent = (message: unknown): Promise<void> =>
   });
 
 const invokeParent = async (
-  type: "publish" | "trace",
+  type: "publish" | "trace" | "session",
   payload: unknown,
 ): Promise<void> => {
   const requestId = randomUUID();
@@ -55,7 +56,9 @@ process.on("message", (untrustedMessage) => {
       caseId: message.caseId,
       cwd: message.cwd,
       userMessage: message.userMessage,
+      ...(message.sessionId ? { sessionId: message.sessionId } : {}),
       publish: (response) => invokeParent("publish", response),
+      saveSession: (sessionId) => invokeParent("session", sessionId),
       trace: (event) => invokeParent("trace", event),
     })
     .then(() => sendToParent({ type: "complete" }))

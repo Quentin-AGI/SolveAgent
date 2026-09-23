@@ -43,7 +43,10 @@ form.addEventListener("submit", async (event) => {
     const result = await requestJson(`/api/cases/${caseId}/messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({
+        message,
+        idempotency_key: crypto.randomUUID(),
+      }),
     });
     appendMessage("agent", result.response.message_markdown);
     status.textContent = result.handoff

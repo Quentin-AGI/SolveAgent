@@ -17,9 +17,24 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 import {
+  acquireCaseWorkerLease,
+  commitCaseEvent,
+  createInitialCaseState,
+  hashCaseRequest,
+  readCaseEventByIdempotencyKey,
+  readCaseState,
+  releaseCaseWorkerLease,
+  type CaseState,
+} from "./case-store.js";
+import {
   publishedCaseResponseSchema,
   type PublishedCaseResponse,
 } from "./published-case-response.js";
+import {
+  buildFrozenProviderProfile,
+  hashProviderProfile,
+  type FrozenProviderProfile,
+} from "./provider-profile.js";
 import {
   createSafetyHandoff,
   detectSafetyRedline,
@@ -34,7 +49,9 @@ export interface AgentRunRequest {
   caseId: string;
   cwd: string;
   userMessage: string;
+  sessionId?: string;
   publish(response: unknown): Promise<void>;
+  saveSession(sessionId: string): Promise<void>;
   trace(event: unknown): Promise<void>;
 }
 
@@ -54,6 +71,7 @@ interface CreateFixAgentServerOptions {
   publicRoot?: string;
   skillFile?: string;
   safetyHandoffWriter?: typeof createSafetyHandoff;
+  providerProfile?: FrozenProviderProfile;
 }
 
 class AgentResponseRejectedError extends Error {
@@ -61,6 +79,27 @@ class AgentResponseRejectedError extends Error {
     super("AGENT_RESPONSE_REJECTED");
   }
 }
+
+class AgentResponseNotPublishedError extends Error {
+  constructor() {
+    super("AGENT_RESPONSE_NOT_PUBLISHED");
+  }
+}
+
+const parseResponsePlan = (
+  candidate: unknown,
+): { status: number; body: unknown } => {
+  if (
+    !candidate ||
+    typeof candidate !== "object" ||
+    !("status" in candidate) ||
+    typeof candidate.status !== "number" ||
+    !("body" in candidate)
+  ) {
+    throw new Error("CASE_CACHED_RESPONSE_INVALID");
+  }
+  return { status: candidate.status, body: candidate.body };
+};
 
 const defaultPublicRoot = fileURLToPath(new URL("../public", import.meta.url));
 const defaultSkillFile = fileURLToPath(
@@ -147,14 +186,48 @@ const sendJson = (
   response.end(JSON.stringify(body));
 };
 
+const appendCaseTrace = async ({
+  caseWorkspaceRoot,
+  leaseId,
+  event,
+}: {
+  caseWorkspaceRoot: string;
+  leaseId: string;
+  event: unknown;
+}): Promise<void> => {
+  const write = async (): Promise<void> => {
+    const current = await readCaseState(caseWorkspaceRoot);
+    if (current.worker_lease_id !== leaseId) {
+      throw new Error("CASE_WORKER_LEASE_LOST");
+    }
+    await appendFile(
+      join(caseWorkspaceRoot, "trace", "events.jsonl"),
+      `${JSON.stringify(event)}\n`,
+      { encoding: "utf8", mode: 0o600 },
+    );
+  };
+
+  try {
+    await write();
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("CASE_")) {
+      throw error;
+    }
+    await write();
+  }
+};
+
 export const createFixAgentServer = ({
   runtime,
   workspaceRoot,
   publicRoot = defaultPublicRoot,
   skillFile = defaultSkillFile,
   safetyHandoffWriter = createSafetyHandoff,
+  providerProfile,
 }: CreateFixAgentServerOptions): FixAgentServer => {
-  const caseDirectories = new Map<string, string>();
+  const activeProviderProfile =
+    providerProfile ?? buildFrozenProviderProfile(process.env);
+  const activeProviderProfileHash = hashProviderProfile(activeProviderProfile);
 
   const server = createServer(async (request, response) => {
     try {
@@ -189,6 +262,10 @@ export const createFixAgentServer = ({
           recursive: true,
           mode: 0o700,
         });
+        await mkdir(join(caseWorkspaceRoot, "evidence"), {
+          recursive: true,
+          mode: 0o555,
+        });
         await mkdir(caseSkillDirectory, { recursive: true });
         const caseSkillFile = join(caseSkillDirectory, "SKILL.md");
         await copyFile(skillFile, caseSkillFile);
@@ -199,8 +276,13 @@ export const createFixAgentServer = ({
         const traceFile = join(traceDirectory, "events.jsonl");
         await writeFile(traceFile, "", { mode: 0o600 });
         await chmod(traceFile, 0o600);
-        await chmod(caseWorkspaceRoot, 0o555);
-        caseDirectories.set(caseId, caseWorkspaceRoot);
+        await createInitialCaseState({
+          caseId,
+          caseWorkspaceRoot,
+          providerId: activeProviderProfile.provider_id,
+          modelId: activeProviderProfile.requested_model_id,
+          providerProfileHash: activeProviderProfileHash,
+        });
         sendJson(response, 201, { case_id: caseId });
         return;
       }
@@ -210,112 +292,398 @@ export const createFixAgentServer = ({
       );
       if (request.method === "POST" && messageRoute) {
         const caseId = messageRoute[1];
-        const caseWorkspaceRoot = caseId
-          ? caseDirectories.get(caseId)
-          : undefined;
-        if (!caseId || !caseWorkspaceRoot) {
+        if (!caseId) {
           sendJson(response, 404, { error: "CASE_NOT_FOUND" });
           return;
         }
+        const caseWorkspaceRoot = join(workspaceRoot, caseId);
+        let caseState: CaseState;
+        try {
+          caseState = await readCaseState(caseWorkspaceRoot);
+          if (caseState.case_id !== caseId) throw new Error("CASE_ID_MISMATCH");
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          ) {
+            sendJson(response, 404, { error: "CASE_NOT_FOUND" });
+            return;
+          }
+          throw error;
+        }
+        const providerProfileMatches =
+          caseState.provider_profile_hash === activeProviderProfileHash;
 
         const body = z
-          .object({ message: z.string().trim().min(1).max(8_000) })
+          .object({
+            message: z.string().trim().min(1).max(8_000),
+            idempotency_key: z.string().uuid().optional(),
+          })
           .parse(await readJson(request));
 
-        const safetyTrigger = detectSafetyRedline(body.message);
-        if (safetyTrigger) {
-          let handoff:
-            | Awaited<ReturnType<typeof createSafetyHandoff>>
-            | { status: "PERSISTENCE_FAILED" };
-          let persistenceError: string | undefined;
-          try {
-            handoff = await safetyHandoffWriter({
+        const messageIdempotencyKey = body.idempotency_key ?? randomUUID();
+        const requestHash = hashCaseRequest({ message: body.message });
+        const completedTurn = await readCaseEventByIdempotencyKey({
+          caseId,
+          caseWorkspaceRoot,
+          idempotencyKey: `turn:${messageIdempotencyKey}`,
+          requestHash,
+        });
+        if (completedTurn) {
+          const cached = parseResponsePlan(completedTurn.result);
+          sendJson(response, cached.status, cached.body);
+          return;
+        }
+        const publishedBeforeCompletion = await readCaseEventByIdempotencyKey({
+          caseId,
+          caseWorkspaceRoot,
+          idempotencyKey: `response:${messageIdempotencyKey}`,
+          requestHash,
+        });
+
+        const lease = await acquireCaseWorkerLease(
+          caseWorkspaceRoot,
+          caseId,
+        );
+        let responsePlan: { status: number; body: unknown };
+        try {
+          caseState = await readCaseState(caseWorkspaceRoot);
+          responsePlan = await (async () => {
+            ({ state: caseState } = await commitCaseEvent({
               caseId,
               caseWorkspaceRoot,
-              trigger: safetyTrigger,
-            });
-          } catch {
-            try {
-              handoff = await safetyHandoffWriter({
+              expectedRevision: caseState.state_revision,
+              idempotencyKey: `lease:acquire:${lease.lease_id}`,
+              eventType: "WORKER_LEASE_ACQUIRED",
+              patch: { worker_lease_id: lease.lease_id },
+            }));
+            if (!providerProfileMatches) {
+              await commitCaseEvent({
                 caseId,
                 caseWorkspaceRoot,
-                trigger: safetyTrigger,
+                expectedRevision: caseState.state_revision,
+                idempotencyKey: `system-error:${messageIdempotencyKey}:provider-profile`,
+                eventType: "SYSTEM_ERROR",
+                patch: {},
+                requestHash,
+                metadata: { code: "FROZEN_PROVIDER_PROFILE_MISMATCH" },
+                workerLeaseId: lease.lease_id,
               });
-            } catch (error) {
-              persistenceError =
-                error instanceof Error
-                  ? error.message
-                  : "HANDOFF_PERSISTENCE_FAILED";
-              handoff = { status: "PERSISTENCE_FAILED" };
+              try {
+                await appendCaseTrace({
+                  caseWorkspaceRoot,
+                  leaseId: lease.lease_id,
+                  event: {
+                  type: "system_error",
+                  code: "FROZEN_PROVIDER_PROFILE_MISMATCH",
+                  },
+                });
+              } catch {
+                console.error(
+                  "CRITICAL_OPERATIONAL_ERROR: provider mismatch trace unavailable",
+                );
+              }
+              throw new Error("FROZEN_PROVIDER_PROFILE_MISMATCH");
             }
-          }
+            if (publishedBeforeCompletion) {
+              const recoveredResponse = publishedCaseResponseSchema.parse(
+                publishedBeforeCompletion.result,
+              );
+              return {
+                status: 200,
+                body: {
+                  case_id: caseId,
+                  data_status: "DATA_NO_GO",
+                  response: recoveredResponse,
+                },
+              };
+            }
+            await commitCaseEvent({
+              caseId,
+              caseWorkspaceRoot,
+              expectedRevision: caseState.state_revision,
+              idempotencyKey: `message:${messageIdempotencyKey}`,
+              eventType: "CUSTOMER_MESSAGE_RECEIVED",
+              requestHash,
+              workerLeaseId: lease.lease_id,
+              patch: {
+                customer_round_count: caseState.customer_round_count + 1,
+              },
+            });
+            caseState = await readCaseState(caseWorkspaceRoot);
 
-          try {
-            await appendFile(
-              join(caseWorkspaceRoot, "trace", "events.jsonl"),
-              `${JSON.stringify({
-                type: persistenceError
-                  ? "critical_operational_error"
-                  : "safety_gate",
-                source: "APPROVED_TEXT_RULE",
-                rule_ids: safetyTrigger.ruleIds,
-                template_id: SAFETY_FALLBACK_TEMPLATE_ID,
-                template_hash: SAFETY_FALLBACK_MESSAGE_HASH,
-                handoff_persistence: handoff.status,
-                ...(handoff.status === "SIMULATED_NOT_CONTACTED"
-                  ? { handoff_id: handoff.id }
-                  : {}),
-                ...(persistenceError ? { error: persistenceError } : {}),
-              })}\n`,
-              { encoding: "utf8", mode: 0o600 },
-            );
-          } catch {
-            console.error("CRITICAL_OPERATIONAL_ERROR: safety trace unavailable");
-          }
-          sendJson(response, 200, {
-            case_id: caseId,
-            data_status: "DATA_NO_GO",
-            response: {
-              message_markdown: SAFETY_FALLBACK_MESSAGE,
-              claim_refs: [],
-              action_card_refs: [],
-              response_type: "SAFETY_HANDOFF",
-            },
-            handoff,
+            const safetyTrigger = detectSafetyRedline(body.message);
+            if (safetyTrigger) {
+              let handoff:
+                | Awaited<ReturnType<typeof createSafetyHandoff>>
+                | { status: "PERSISTENCE_FAILED" };
+              let persistenceError: string | undefined;
+              try {
+                handoff = await safetyHandoffWriter({
+                  caseId,
+                  caseWorkspaceRoot,
+                  trigger: safetyTrigger,
+                });
+              } catch {
+                try {
+                  handoff = await safetyHandoffWriter({
+                    caseId,
+                    caseWorkspaceRoot,
+                    trigger: safetyTrigger,
+                  });
+                } catch (error) {
+                  persistenceError =
+                    error instanceof Error
+                      ? error.message
+                      : "HANDOFF_PERSISTENCE_FAILED";
+                  handoff = { status: "PERSISTENCE_FAILED" };
+                }
+              }
+
+              ({ state: caseState } = await commitCaseEvent({
+                caseId,
+                caseWorkspaceRoot,
+                expectedRevision: caseState.state_revision,
+                idempotencyKey: `safety:${messageIdempotencyKey}`,
+                eventType: persistenceError
+                  ? "SAFETY_HANDOFF_PERSISTENCE_FAILED"
+                  : "SAFETY_HANDOFF_CREATED",
+                patch: {
+                route: "SAFETY_HANDOFF",
+                safety_status: "TRIGGERED",
+                safety_gate_rule_version: "APPROVED_TEXT_RULE_V0",
+                safety_message_template_id: SAFETY_FALLBACK_TEMPLATE_ID,
+                handoff_reason: safetyTrigger.ruleIds.join(","),
+                  last_response_type: "SAFETY_HANDOFF",
+                },
+                requestHash,
+                workerLeaseId: lease.lease_id,
+              }));
+
+              try {
+                await appendCaseTrace({
+                  caseWorkspaceRoot,
+                  leaseId: lease.lease_id,
+                  event: {
+                    type: persistenceError
+                      ? "critical_operational_error"
+                      : "safety_gate",
+                    source: "APPROVED_TEXT_RULE",
+                    rule_ids: safetyTrigger.ruleIds,
+                    template_id: SAFETY_FALLBACK_TEMPLATE_ID,
+                    template_hash: SAFETY_FALLBACK_MESSAGE_HASH,
+                    handoff_persistence: handoff.status,
+                    ...(handoff.status === "SIMULATED_NOT_CONTACTED"
+                      ? { handoff_id: handoff.id }
+                      : {}),
+                    ...(persistenceError ? { error: persistenceError } : {}),
+                  },
+                });
+              } catch {
+                console.error(
+                  "CRITICAL_OPERATIONAL_ERROR: safety trace unavailable",
+                );
+              }
+              return {
+                status: 200,
+                body: {
+                  case_id: caseId,
+                  data_status: "DATA_NO_GO",
+                  response: {
+                    message_markdown: SAFETY_FALLBACK_MESSAGE,
+                    claim_refs: [],
+                    action_card_refs: [],
+                    response_type: "SAFETY_HANDOFF",
+                  },
+                  handoff,
+                },
+              };
+            }
+
+            let publishedResponse: PublishedCaseResponse | undefined;
+            let lastAttemptError: unknown;
+            const turnBaseSessionId = caseState.claude_session_id;
+            for (let attempt = 1; attempt <= 2; attempt += 1) {
+              try {
+                let attemptResponse: PublishedCaseResponse | undefined;
+                await runtime.run({
+                  caseId,
+                  cwd: caseWorkspaceRoot,
+                  userMessage: body.message,
+                  ...(turnBaseSessionId
+                    ? { sessionId: turnBaseSessionId }
+                    : {}),
+                  async publish(candidate) {
+                    if (attemptResponse) {
+                      throw new AgentResponseRejectedError();
+                    }
+                    const parsed =
+                      publishedCaseResponseSchema.safeParse(candidate);
+                    if (!parsed.success) {
+                      throw new AgentResponseRejectedError();
+                    }
+                    attemptResponse = parsed.data;
+                    const current = await readCaseState(caseWorkspaceRoot);
+                    await commitCaseEvent({
+                      caseId,
+                      caseWorkspaceRoot,
+                      expectedRevision: current.state_revision,
+                      idempotencyKey: `response:${messageIdempotencyKey}`,
+                      eventType: "RESPONSE_PUBLISHED",
+                      patch: {
+                        last_response_type: parsed.data.response_type,
+                      },
+                      requestHash,
+                      result: parsed.data,
+                      workerLeaseId: lease.lease_id,
+                    });
+                    caseState = await readCaseState(caseWorkspaceRoot);
+                  },
+                  async saveSession(sessionId) {
+                    const current = await readCaseState(caseWorkspaceRoot);
+                    if (current.claude_session_id === sessionId) return;
+                    await commitCaseEvent({
+                      caseId,
+                      caseWorkspaceRoot,
+                      expectedRevision: current.state_revision,
+                      idempotencyKey: `session:${sessionId}`,
+                      eventType: "CLAUDE_SESSION_SAVED",
+                      patch: { claude_session_id: sessionId },
+                      requestHash,
+                      workerLeaseId: lease.lease_id,
+                    });
+                    caseState = await readCaseState(caseWorkspaceRoot);
+                  },
+                  async trace(event) {
+                    await appendCaseTrace({
+                      caseWorkspaceRoot,
+                      leaseId: lease.lease_id,
+                      event,
+                    });
+                  },
+                });
+                if (!attemptResponse) {
+                  throw new AgentResponseNotPublishedError();
+                }
+                publishedResponse = attemptResponse;
+                break;
+              } catch (error) {
+                lastAttemptError = error;
+                const code =
+                  error instanceof Error
+                    ? (error.message.split(":", 1)[0] ?? "UNKNOWN_RUNTIME_ERROR")
+                    : "UNKNOWN_RUNTIME_ERROR";
+                if (
+                  [
+                    "CASE_IDEMPOTENCY_CONFLICT",
+                    "CASE_ID_MISMATCH",
+                    "CASE_REVISION_CONFLICT",
+                    "CASE_WORKER_LEASE_LOST",
+                  ].includes(code)
+                ) {
+                  throw error;
+                }
+                try {
+                  const current = await readCaseState(caseWorkspaceRoot);
+                  await commitCaseEvent({
+                    caseId,
+                    caseWorkspaceRoot,
+                    expectedRevision: current.state_revision,
+                    idempotencyKey: `system-error:${messageIdempotencyKey}:${attempt}`,
+                    eventType: "SYSTEM_ERROR",
+                    patch: {},
+                    requestHash,
+                    metadata: { attempt, code },
+                    workerLeaseId: lease.lease_id,
+                  });
+                  await appendCaseTrace({
+                    caseWorkspaceRoot,
+                    leaseId: lease.lease_id,
+                    event: {
+                      type: "system_error",
+                      attempt,
+                      code,
+                    },
+                  });
+                } catch {
+                  console.error(
+                    "CRITICAL_OPERATIONAL_ERROR: SYSTEM_ERROR persistence failed",
+                  );
+                }
+                const committedResponse =
+                  await readCaseEventByIdempotencyKey({
+                    caseId,
+                    caseWorkspaceRoot,
+                    idempotencyKey: `response:${messageIdempotencyKey}`,
+                    requestHash,
+                  });
+                if (committedResponse) {
+                  publishedResponse = publishedCaseResponseSchema.parse(
+                    committedResponse.result,
+                  );
+                  break;
+                }
+              }
+            }
+
+            if (!publishedResponse) {
+              const failure =
+                lastAttemptError ?? new Error("UNKNOWN_RUNTIME_ERROR");
+              const isPublicationFailure =
+                failure instanceof AgentResponseRejectedError ||
+                failure instanceof AgentResponseNotPublishedError;
+              return {
+                status: isPublicationFailure ? 502 : 500,
+                body: {
+                  error: isPublicationFailure
+                    ? failure.message
+                    : "SYSTEM_ERROR",
+                },
+              };
+            }
+
+            return {
+              status: 200,
+              body: {
+                case_id: caseId,
+                data_status: "DATA_NO_GO",
+                response: publishedResponse,
+              },
+            };
+          })();
+          const current = await readCaseState(caseWorkspaceRoot);
+          await commitCaseEvent({
+            caseId,
+            caseWorkspaceRoot,
+            expectedRevision: current.state_revision,
+            idempotencyKey: `turn:${messageIdempotencyKey}`,
+            eventType:
+              responsePlan.status >= 500 ? "TURN_FAILED" : "TURN_COMPLETED",
+            patch: {},
+            requestHash,
+            result: responsePlan,
+            workerLeaseId: lease.lease_id,
           });
-          return;
+        } finally {
+          try {
+            const current = await readCaseState(caseWorkspaceRoot);
+            if (current.worker_lease_id === lease.lease_id) {
+              await commitCaseEvent({
+                caseId,
+                caseWorkspaceRoot,
+                expectedRevision: current.state_revision,
+                idempotencyKey: `lease:release:${lease.lease_id}`,
+                eventType: "WORKER_LEASE_RELEASED",
+                patch: { worker_lease_id: null },
+                workerLeaseId: lease.lease_id,
+              });
+            }
+          } finally {
+            await releaseCaseWorkerLease(caseWorkspaceRoot, lease.lease_id);
+          }
         }
-
-        let publishedResponse: PublishedCaseResponse | undefined;
-
-        await runtime.run({
-          caseId,
-          cwd: caseWorkspaceRoot,
-          userMessage: body.message,
-          async publish(candidate) {
-            const parsed = publishedCaseResponseSchema.safeParse(candidate);
-            if (!parsed.success) throw new AgentResponseRejectedError();
-            publishedResponse = parsed.data;
-          },
-          async trace(event) {
-            await appendFile(
-              join(caseWorkspaceRoot, "trace", "events.jsonl"),
-              `${JSON.stringify(event)}\n`,
-              { encoding: "utf8", mode: 0o600 },
-            );
-          },
-        });
-
-        if (!publishedResponse) {
-          sendJson(response, 502, { error: "AGENT_RESPONSE_NOT_PUBLISHED" });
-          return;
-        }
-
-        sendJson(response, 200, {
-          case_id: caseId,
-          data_status: "DATA_NO_GO",
-          response: publishedResponse,
-        });
+        sendJson(response, responsePlan.status, responsePlan.body);
         return;
       }
 
@@ -333,7 +701,32 @@ export const createFixAgentServer = ({
         sendJson(response, 502, { error: error.message });
         return;
       }
-      sendJson(response, 500, { error: "INTERNAL_ERROR" });
+      if (error instanceof AgentResponseNotPublishedError) {
+        sendJson(response, 502, { error: error.message });
+        return;
+      }
+      if (
+        error instanceof Error &&
+        error.message === "CASE_WORKER_LEASE_CONFLICT"
+      ) {
+        sendJson(response, 409, { error: "CASE_BUSY" });
+        return;
+      }
+      if (
+        error instanceof Error &&
+        error.message === "CASE_IDEMPOTENCY_CONFLICT"
+      ) {
+        sendJson(response, 409, { error: "CASE_IDEMPOTENCY_CONFLICT" });
+        return;
+      }
+      if (
+        error instanceof Error &&
+        error.message.startsWith("CASE_REVISION_CONFLICT")
+      ) {
+        sendJson(response, 409, { error: "CASE_REVISION_CONFLICT" });
+        return;
+      }
+      sendJson(response, 500, { error: "SYSTEM_ERROR" });
     }
   });
 
