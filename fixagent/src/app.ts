@@ -27,9 +27,13 @@ import {
   type CaseState,
 } from "./case-store.js";
 import {
-  publishedCaseResponseSchema,
-  type PublishedCaseResponse,
-} from "./published-case-response.js";
+  EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
+  loadCaseKnowledgeSnapshot,
+  parseKnowledgeSnapshot,
+  validatePublishedCaseResponse,
+  type KnowledgeSnapshot,
+} from "./knowledge-store.js";
+import type { PublishedCaseResponse } from "./published-case-response.js";
 import {
   buildFrozenProviderProfile,
   hashProviderProfile,
@@ -72,6 +76,7 @@ interface CreateFixAgentServerOptions {
   skillFile?: string;
   safetyHandoffWriter?: typeof createSafetyHandoff;
   providerProfile?: FrozenProviderProfile;
+  knowledgeSnapshot?: KnowledgeSnapshot;
 }
 
 class AgentResponseRejectedError extends Error {
@@ -224,10 +229,18 @@ export const createFixAgentServer = ({
   skillFile = defaultSkillFile,
   safetyHandoffWriter = createSafetyHandoff,
   providerProfile,
+  knowledgeSnapshot = EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
 }: CreateFixAgentServerOptions): FixAgentServer => {
   const activeProviderProfile =
     providerProfile ?? buildFrozenProviderProfile(process.env);
   const activeProviderProfileHash = hashProviderProfile(activeProviderProfile);
+  const activeKnowledgeSnapshot = parseKnowledgeSnapshot(knowledgeSnapshot);
+  const activeKnowledgeSnapshotContent = `${JSON.stringify(
+    activeKnowledgeSnapshot,
+    null,
+    2,
+  )}\n`;
+  const activeKnowledgeSnapshotId = activeKnowledgeSnapshot.snapshot_id;
 
   const server = createServer(async (request, response) => {
     try {
@@ -246,6 +259,7 @@ export const createFixAgentServer = ({
         const caseWorkspaceRoot = join(workspaceRoot, caseId);
         const scratchDirectory = join(caseWorkspaceRoot, "scratch");
         const traceDirectory = join(caseWorkspaceRoot, "trace");
+        const fixAgentDirectory = join(caseWorkspaceRoot, ".fixagent");
         const caseSkillDirectory = join(
           caseWorkspaceRoot,
           ".claude",
@@ -254,6 +268,7 @@ export const createFixAgentServer = ({
         );
         await mkdir(scratchDirectory, { recursive: true });
         await mkdir(traceDirectory, { recursive: true, mode: 0o700 });
+        await mkdir(fixAgentDirectory, { recursive: true, mode: 0o700 });
         await mkdir(join(caseWorkspaceRoot, ".home", ".claude"), {
           recursive: true,
           mode: 0o700,
@@ -276,12 +291,24 @@ export const createFixAgentServer = ({
         const traceFile = join(traceDirectory, "events.jsonl");
         await writeFile(traceFile, "", { mode: 0o600 });
         await chmod(traceFile, 0o600);
+        const knowledgeSnapshotFile = join(
+          fixAgentDirectory,
+          "knowledge-snapshot.json",
+        );
+        await writeFile(
+          knowledgeSnapshotFile,
+          activeKnowledgeSnapshotContent,
+          { encoding: "utf8", mode: 0o600, flag: "wx" },
+        );
+        await chmod(knowledgeSnapshotFile, 0o444);
+        await chmod(fixAgentDirectory, 0o555);
         await createInitialCaseState({
           caseId,
           caseWorkspaceRoot,
           providerId: activeProviderProfile.provider_id,
           modelId: activeProviderProfile.requested_model_id,
           providerProfileHash: activeProviderProfileHash,
+          knowledgeSnapshotId: activeKnowledgeSnapshotId,
         });
         sendJson(response, 201, { case_id: caseId });
         return;
@@ -314,6 +341,11 @@ export const createFixAgentServer = ({
         }
         const providerProfileMatches =
           caseState.provider_profile_hash === activeProviderProfileHash;
+        const caseKnowledgeSnapshot = await loadCaseKnowledgeSnapshot(
+          caseWorkspaceRoot,
+        );
+        const knowledgeSnapshotMatches =
+          caseState.knowledge_snapshot_id === caseKnowledgeSnapshot.snapshot_id;
 
         const body = z
           .object({
@@ -386,10 +418,27 @@ export const createFixAgentServer = ({
               }
               throw new Error("FROZEN_PROVIDER_PROFILE_MISMATCH");
             }
+            if (!knowledgeSnapshotMatches) {
+              await commitCaseEvent({
+                caseId,
+                caseWorkspaceRoot,
+                expectedRevision: caseState.state_revision,
+                idempotencyKey: `system-error:${messageIdempotencyKey}:knowledge-snapshot`,
+                eventType: "SYSTEM_ERROR",
+                patch: {},
+                requestHash,
+                metadata: { code: "FROZEN_KNOWLEDGE_SNAPSHOT_MISMATCH" },
+                workerLeaseId: lease.lease_id,
+              });
+              throw new Error("FROZEN_KNOWLEDGE_SNAPSHOT_MISMATCH");
+            }
             if (publishedBeforeCompletion) {
-              const recoveredResponse = publishedCaseResponseSchema.parse(
-                publishedBeforeCompletion.result,
-              );
+              const recoveredResponse = validatePublishedCaseResponse({
+                candidate: publishedBeforeCompletion.result,
+                snapshot: caseKnowledgeSnapshot,
+                caseKnowledgeSnapshotId: caseState.knowledge_snapshot_id,
+                evidenceRefs: caseState.evidence_refs,
+              });
               return {
                 status: 200,
                 body: {
@@ -518,13 +567,19 @@ export const createFixAgentServer = ({
                     if (attemptResponse) {
                       throw new AgentResponseRejectedError();
                     }
-                    const parsed =
-                      publishedCaseResponseSchema.safeParse(candidate);
-                    if (!parsed.success) {
+                    const current = await readCaseState(caseWorkspaceRoot);
+                    let parsed: PublishedCaseResponse;
+                    try {
+                      parsed = validatePublishedCaseResponse({
+                        candidate,
+                        snapshot: caseKnowledgeSnapshot,
+                        caseKnowledgeSnapshotId: current.knowledge_snapshot_id,
+                        evidenceRefs: current.evidence_refs,
+                      });
+                    } catch {
                       throw new AgentResponseRejectedError();
                     }
-                    attemptResponse = parsed.data;
-                    const current = await readCaseState(caseWorkspaceRoot);
+                    attemptResponse = parsed;
                     await commitCaseEvent({
                       caseId,
                       caseWorkspaceRoot,
@@ -532,10 +587,10 @@ export const createFixAgentServer = ({
                       idempotencyKey: `response:${messageIdempotencyKey}`,
                       eventType: "RESPONSE_PUBLISHED",
                       patch: {
-                        last_response_type: parsed.data.response_type,
+                        last_response_type: parsed.response_type,
                       },
                       requestHash,
-                      result: parsed.data,
+                      result: parsed,
                       workerLeaseId: lease.lease_id,
                     });
                     caseState = await readCaseState(caseWorkspaceRoot);
@@ -617,11 +672,15 @@ export const createFixAgentServer = ({
                     caseWorkspaceRoot,
                     idempotencyKey: `response:${messageIdempotencyKey}`,
                     requestHash,
-                  });
+                });
                 if (committedResponse) {
-                  publishedResponse = publishedCaseResponseSchema.parse(
-                    committedResponse.result,
-                  );
+                  const current = await readCaseState(caseWorkspaceRoot);
+                  publishedResponse = validatePublishedCaseResponse({
+                    candidate: committedResponse.result,
+                    snapshot: caseKnowledgeSnapshot,
+                    caseKnowledgeSnapshotId: current.knowledge_snapshot_id,
+                    evidenceRefs: current.evidence_refs,
+                  });
                   break;
                 }
               }

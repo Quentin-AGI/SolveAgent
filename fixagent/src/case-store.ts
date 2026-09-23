@@ -202,6 +202,7 @@ interface CreateInitialCaseStateInput {
   providerId: string;
   modelId: string;
   providerProfileHash: string;
+  knowledgeSnapshotId: string;
 }
 
 const createInitialCaseStateOnce = async ({
@@ -210,6 +211,7 @@ const createInitialCaseStateOnce = async ({
   providerId,
   modelId,
   providerProfileHash,
+  knowledgeSnapshotId,
 }: CreateInitialCaseStateInput): Promise<CaseState> => {
   try {
     const existing = await readCaseState(caseWorkspaceRoot);
@@ -235,7 +237,7 @@ const createInitialCaseStateOnce = async ({
     provider_id: providerId,
     model_id: modelId,
     provider_profile_hash: providerProfileHash,
-    knowledge_snapshot_id: "UNSET",
+    knowledge_snapshot_id: knowledgeSnapshotId,
     worker_lease_id: null,
     route: "EVIDENCE_COLLECTION" as const,
     safety_status: "CLEAR" as const,

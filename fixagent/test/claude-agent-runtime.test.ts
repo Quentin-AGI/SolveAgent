@@ -8,6 +8,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 
 import { createClaudeAgentRuntime } from "../src/claude-agent-runtime.js";
+import { EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT } from "../src/knowledge-store.js";
 
 const validInitMessage = {
   type: "system",
@@ -20,6 +21,11 @@ const validInitMessage = {
     "Read",
     "Edit",
     "Write",
+    "mcp__fixagent__get_product_context",
+    "mcp__fixagent__search_product_docs",
+    "mcp__fixagent__search_historical_cases",
+    "mcp__fixagent__get_action_policy",
+    "mcp__fixagent__get_case_state",
     "mcp__fixagent__publish_case_response",
   ],
   mcp_servers: [{ name: "fixagent", status: "connected", source: "sdk" }],
@@ -38,6 +44,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
   let savedSessionId: string | undefined;
 
   const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
     environment: {
       PATH: "/bin",
       HOME: "/isolated/cases/case-123/.home",
@@ -76,7 +83,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
     "Bash",
     "Read(scratch/**)",
     "Edit(scratch/**)",
-    "mcp__fixagent__publish_case_response",
+    "mcp__fixagent__*",
   ]);
   assert.equal(captured.options?.mcpServers?.fixagent?.type, "sdk");
   assert.deepEqual(captured.options?.sandbox?.filesystem, {
@@ -104,6 +111,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
 
 test("Case is rejected when SDK init cannot prove the core Skill is available", async () => {
   const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
     environment: {},
     queryAgent() {
       return (async function* (): AsyncGenerator<SDKMessage> {
@@ -131,6 +139,7 @@ test("Case is rejected when SDK init cannot prove the core Skill is available", 
 test("a returning Case resumes its own Claude Agent SDK Session", async () => {
   let captured: Parameters<typeof query>[0] | undefined;
   const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
     environment: {},
     queryAgent(parameters) {
       captured = parameters;
@@ -159,6 +168,7 @@ test("a returning Case resumes its own Claude Agent SDK Session", async () => {
 
 test("Case is rejected when observed model differs from the Frozen Provider Profile", async () => {
   const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
     environment: {
       FIXAGENT_EXPECTED_OBSERVED_MODEL_ID: "expected-model",
     },

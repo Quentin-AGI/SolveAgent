@@ -5,11 +5,20 @@ import {
   type SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "node:path";
+import { z } from "zod";
 
 import type {
   AgentRunRequest,
   AgentRuntime,
 } from "./app.js";
+import { readCaseState } from "./case-store.js";
+import {
+  getActionPolicy,
+  loadCaseKnowledgeSnapshot,
+  searchKnowledge,
+  validatePublishedCaseResponse,
+  type KnowledgeSnapshot,
+} from "./knowledge-store.js";
 import { publishedCaseResponseShape } from "./published-case-response.js";
 import {
   normalizedProviderValue,
@@ -23,13 +32,18 @@ type QueryAgent = (parameters: QueryParameters) => AsyncIterable<SDKMessage>;
 interface CreateClaudeAgentRuntimeOptions {
   queryAgent?: QueryAgent;
   environment?: NodeJS.ProcessEnv;
+  knowledgeSnapshot?: KnowledgeSnapshot;
 }
 
 const systemPrompt = `You are FixAgent, a single hardware-support Agent for CarPlay and in-vehicle display terminals.
 Use the hardware-troubleshooting Skill and only approved knowledge or current Case evidence.
 Do not treat model memory as approved product knowledge.
 Ordinary clarification and evidence requests are autonomous. Never invent a physical or state-changing device operation.
-This tracer slice has no approved Knowledge or Action Card store. You may only ask for non-operational evidence, with empty claim_refs and action_card_refs and response_type EVIDENCE_REQUEST.
+Do not request device observation or propose a device action until Case evidence confirms the vehicle is safely parked. You may first ask the user to confirm that fact.
+Use get_product_context before making configuration-specific claims. Use search_product_docs and search_historical_cases for approved evidence.
+Use get_action_policy before proposing any instruction that asks the user to touch the device or change device state. An empty policy result means no device action is allowed.
+Use get_case_state to reuse confirmed evidence and avoid repeating stable questions.
+Knowledge and Action Card references must contain the exact ID and version returned by these tools.
 All user-visible diagnostic, explanatory, or operational content must be submitted through mcp__fixagent__publish_case_response.
 Do not rely on ordinary assistant text being shown to the user.`;
 
@@ -61,7 +75,18 @@ const assertArchitectureInit = (
   message: Extract<SDKMessage, { type: "system"; subtype: "init" }>,
   environment: NodeJS.ProcessEnv,
 ): void => {
-  const requiredTools = ["Bash", "Read", "Edit", "Write"];
+  const requiredTools = [
+    "Bash",
+    "Read",
+    "Edit",
+    "Write",
+    "mcp__fixagent__get_product_context",
+    "mcp__fixagent__search_product_docs",
+    "mcp__fixagent__search_historical_cases",
+    "mcp__fixagent__get_action_policy",
+    "mcp__fixagent__get_case_state",
+    "mcp__fixagent__publish_case_response",
+  ];
   const missingTools = requiredTools.filter(
     (requiredTool) => !message.tools.includes(requiredTool),
   );
@@ -96,17 +121,123 @@ const assertArchitectureInit = (
   }
 };
 
-const createPublishServer = (request: AgentRunRequest) => {
+const toolResult = (value: Record<string, unknown>) => ({
+  content: [{ type: "text" as const, text: JSON.stringify(value) }],
+  structuredContent: value,
+});
+
+const publicationErrorCode = (error: unknown): string =>
+  error instanceof Error
+    ? (error.message.split(":", 1)[0] ?? "PUBLICATION_REJECTED")
+    : "PUBLICATION_REJECTED";
+
+const createFixAgentMcpServer = (
+  request: AgentRunRequest,
+  snapshot: KnowledgeSnapshot,
+) => {
+  const getProductContext = tool(
+    "get_product_context",
+    "Return the frozen product family, configuration, hardware, software, and region for this Case.",
+    {},
+    async () =>
+      toolResult({
+        knowledge_snapshot_id: snapshot.snapshot_id,
+        product_context: snapshot.product_context,
+      }),
+    { annotations: { idempotentHint: true, openWorldHint: false }, alwaysLoad: true },
+  );
+
+  const searchInput = {
+    query: z.string().trim().min(1).max(500),
+    max_results: z.number().int().min(1).max(10).optional(),
+  };
+  const searchProductDocs = tool(
+    "search_product_docs",
+    "Search applicable approved product documentation in the frozen Knowledge Snapshot.",
+    searchInput,
+    async ({ query, max_results: maxResults }) =>
+      toolResult({
+        knowledge_snapshot_id: snapshot.snapshot_id,
+        results: searchKnowledge(snapshot, "PRODUCT_DOC", query, maxResults),
+      }),
+    { annotations: { idempotentHint: true, openWorldHint: false }, alwaysLoad: true },
+  );
+  const searchHistoricalCases = tool(
+    "search_historical_cases",
+    "Search applicable approved historical Cases. Results are prior evidence, not proof of the current Case.",
+    searchInput,
+    async ({ query, max_results: maxResults }) =>
+      toolResult({
+        knowledge_snapshot_id: snapshot.snapshot_id,
+        results: searchKnowledge(
+          snapshot,
+          "HISTORICAL_CASE",
+          query,
+          maxResults,
+        ),
+      }),
+    { annotations: { idempotentHint: true, openWorldHint: false }, alwaysLoad: true },
+  );
+  const getCaseState = tool(
+    "get_case_state",
+    "Return the current structured Case facts, hypotheses, unknowns, evidence, actions, and do-not-ask-again records.",
+    {},
+    async () => {
+      const state = await readCaseState(request.cwd);
+      return toolResult({
+        case_id: state.case_id,
+        state_revision: state.state_revision,
+        knowledge_snapshot_id: state.knowledge_snapshot_id,
+        route: state.route,
+        safety_status: state.safety_status,
+        facts: state.facts,
+        hypotheses: state.hypotheses,
+        unknowns: state.unknowns,
+        evidence_refs: state.evidence_refs,
+        actions_and_results: state.actions_and_results,
+        do_not_ask_again: state.do_not_ask_again,
+      });
+    },
+    { annotations: { idempotentHint: true, openWorldHint: false }, alwaysLoad: true },
+  );
+  const getApprovedActionPolicy = tool(
+    "get_action_policy",
+    "Return approved Action Cards whose configuration and evidence prerequisites match the current Case, plus applicable prohibited actions. This does not choose the next action.",
+    {},
+    async () => {
+      const state = await readCaseState(request.cwd);
+      return toolResult({
+        knowledge_snapshot_id: snapshot.snapshot_id,
+        ...getActionPolicy(snapshot, state.evidence_refs),
+      });
+    },
+    { annotations: { idempotentHint: true, openWorldHint: false }, alwaysLoad: true },
+  );
+
   const publishCaseResponse = tool(
     "publish_case_response",
     "Validate and publish the exact user-visible FixAgent response. This is the only publication path.",
     publishedCaseResponseShape,
     async (args) => {
-      await request.publish(args);
-      return {
-        content: [{ type: "text" as const, text: "Case response published." }],
-        structuredContent: { status: "PUBLISHED" },
-      };
+      try {
+        const state = await readCaseState(request.cwd);
+        const response = validatePublishedCaseResponse({
+          candidate: args,
+          snapshot,
+          caseKnowledgeSnapshotId: state.knowledge_snapshot_id,
+          evidenceRefs: state.evidence_refs,
+        });
+        await request.publish(response);
+        return toolResult({ status: "PUBLISHED" });
+      } catch (error) {
+        return {
+          ...toolResult({
+            status: "REJECTED",
+            code: publicationErrorCode(error),
+          }),
+          isError: true,
+        };
+      }
     },
     {
       annotations: {
@@ -120,7 +251,14 @@ const createPublishServer = (request: AgentRunRequest) => {
   return createSdkMcpServer({
     name: "fixagent",
     version: "0.1.0",
-    tools: [publishCaseResponse],
+    tools: [
+      getProductContext,
+      searchProductDocs,
+      searchHistoricalCases,
+      getApprovedActionPolicy,
+      getCaseState,
+      publishCaseResponse,
+    ],
     alwaysLoad: true,
   });
 };
@@ -128,9 +266,12 @@ const createPublishServer = (request: AgentRunRequest) => {
 export const createClaudeAgentRuntime = ({
   queryAgent = query,
   environment = process.env,
+  knowledgeSnapshot,
 }: CreateClaudeAgentRuntimeOptions = {}): AgentRuntime => ({
   async run(request) {
-    const fixagent = createPublishServer(request);
+    const snapshot =
+      knowledgeSnapshot ?? (await loadCaseKnowledgeSnapshot(request.cwd));
+    const fixagent = createFixAgentMcpServer(request, snapshot);
     const model =
       normalizedProviderValue(environment.FIXAGENT_MODEL) ??
       normalizedProviderValue(environment.ANTHROPIC_MODEL);
@@ -153,7 +294,7 @@ export const createClaudeAgentRuntime = ({
         "Read(scratch/**)",
         // Claude Code applies Edit path rules to both native Edit and Write.
         "Edit(scratch/**)",
-        "mcp__fixagent__publish_case_response",
+        "mcp__fixagent__*",
       ],
       disallowedTools: ["Agent"],
       permissionMode: "dontAsk",

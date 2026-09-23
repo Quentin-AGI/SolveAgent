@@ -18,6 +18,11 @@ import {
   type AgentRunRequest,
   type AgentRuntime,
 } from "../src/app.js";
+import { commitCaseEvent, readCaseState } from "../src/case-store.js";
+import {
+  createKnowledgeSnapshot,
+  VEHICLE_SAFELY_PARKED_EVIDENCE_REF,
+} from "../src/knowledge-store.js";
 import { buildFrozenProviderProfile } from "../src/provider-profile.js";
 
 const temporaryDirectories: string[] = [];
@@ -40,6 +45,61 @@ const testProviderProfile = (
     FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION: claudeCodeVersion,
     FIXAGENT_EXPECTED_OBSERVED_MODEL_ID: modelId,
   });
+
+const testKnowledgeSnapshot = () => {
+  const applicability = {
+    configuration_ids: ["RPI4_7IN"],
+    software_versions: ["20250108"],
+    regions: ["GLOBAL"],
+  };
+  return createKnowledgeSnapshot({
+    snapshot_id: "TEST_EVAL_SNAPSHOT",
+    mode: "EVALUATION",
+    created_at: "2026-09-23T00:00:00.000Z",
+    cutoff_at: "2026-09-22T23:59:59.999Z",
+    product_context: {
+      product_family: "CRANKSHAFT_RASPBERRY_PI_DISPLAY",
+      configuration_id: "RPI4_7IN",
+      hardware_version: "RPI4",
+      software_version: "20250108",
+      region: "GLOBAL",
+    },
+    documents: [
+      {
+        knowledge_id: "DOC-DISPLAY-001",
+        version: "1",
+        kind: "PRODUCT_DOC",
+        title: "Test display procedure",
+        text: "Fixture-only approved display procedure.",
+        tags: ["display"],
+        applicability,
+        source: {
+          uri: "https://example.test/display",
+          title: "Test source",
+          retrieved_at: "2026-09-22T12:00:00.000Z",
+          source_content_hash: "a".repeat(64),
+        },
+        approval_status: "EVAL_APPROVED",
+      },
+    ],
+    action_cards: [
+      {
+        action_id: "ACTION-DISPLAY-TEST",
+        version: "1",
+        title: "Run the approved display test",
+        applicability,
+        prerequisite_evidence_refs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
+        risk_level: "LEVEL_1",
+        steps: ["Run the fixture-only test."],
+        verification: ["Check the original symptom."],
+        rollback: ["Stop the fixture-only test."],
+        source_ref: { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+        approval_status: "EVAL_APPROVED",
+      },
+    ],
+    prohibited_actions: [],
+  });
+};
 
 const makeDirectoriesRemovable = async (directory: string): Promise<void> => {
   const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
@@ -441,6 +501,72 @@ test("user never receives an unvalidated diagnostic or device action", async () 
   }
 });
 
+test("host publishes an action only when its frozen Knowledge and Action Card references are exact", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const knowledgeSnapshot = testKnowledgeSnapshot();
+  const runtime: AgentRuntime = {
+    async run(request) {
+      await request.publish({
+        message_markdown: "请执行已批准的显示测试，然后确认原始症状。",
+        claim_refs: [{ knowledge_id: "DOC-DISPLAY-001", version: "1" }],
+        action_card_refs: [
+          { action_id: "ACTION-DISPLAY-TEST", version: "1" },
+        ],
+        response_type: "ACTION",
+      });
+    },
+  };
+  const app = createFixAgentServer({
+    runtime,
+    workspaceRoot,
+    knowledgeSnapshot,
+  });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const caseWorkspaceRoot = join(workspaceRoot, caseId);
+    const initial = await readCaseState(caseWorkspaceRoot);
+    await commitCaseEvent({
+      caseId,
+      caseWorkspaceRoot,
+      expectedRevision: initial.state_revision,
+      idempotencyKey: "test:vehicle-safely-parked",
+      eventType: "CASE_EVIDENCE_RECORDED",
+      patch: {
+        evidence_refs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
+      },
+    });
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "请给我下一步测试" }),
+      },
+    );
+    const body = (await replied.json()) as {
+      response: { response_type: string; action_card_refs: unknown[] };
+    };
+
+    assert.equal(replied.status, 200);
+    assert.equal(body.response.response_type, "ACTION");
+    assert.deepEqual(body.response.action_card_refs, [
+      { action_id: "ACTION-DISPLAY-TEST", version: "1" },
+    ]);
+    const state = JSON.parse(
+      await readFile(join(workspaceRoot, caseId, "state.json"), "utf8"),
+    ) as { knowledge_snapshot_id: string };
+    assert.equal(state.knowledge_snapshot_id, knowledgeSnapshot.snapshot_id);
+  } finally {
+    await app.close();
+  }
+});
+
 test("approved safety redlines bypass the Agent and create a simulated safety handoff", async () => {
   const redlines = [
     "设备正在冒烟",
@@ -787,6 +913,17 @@ test("Case starts with a read-only project Skill, Scratch workspace, and private
         )).mode & 0o777,
         0o444,
       );
+      const frozenKnowledgeFile = join(
+        request.cwd,
+        ".fixagent",
+        "knowledge-snapshot.json",
+      );
+      const frozenKnowledge = JSON.parse(
+        await readFile(frozenKnowledgeFile, "utf8"),
+      ) as { snapshot_id: string; content_hash: string };
+      assert.equal(frozenKnowledge.snapshot_id, "EMPTY_EVAL_V0");
+      assert.match(frozenKnowledge.content_hash, /^[a-f0-9]{64}$/);
+      assert.equal((await stat(frozenKnowledgeFile)).mode & 0o777, 0o444);
 
       await request.trace({ type: "system", subtype: "init", session_id: "s-1" });
 
@@ -866,6 +1003,7 @@ test("an existing Case resumes its Claude Session after the HTTP process restart
   let resumedSessionId: string | undefined;
   const restartedServer = createFixAgentServer({
     workspaceRoot,
+    knowledgeSnapshot: testKnowledgeSnapshot(),
     runtime: {
       async run(request) {
         resumedSessionId = request.sessionId;
