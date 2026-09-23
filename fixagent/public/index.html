@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FixAgent V0</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <p class="eyebrow">FixAgent · Hardware Doctor</p>
+          <h1>车载显示终端诊断</h1>
+        </div>
+        <strong class="data-status">NON-SCORED · DATA_NO_GO</strong>
+      </header>
+
+      <section class="conversation" aria-live="polite">
+        <div id="messages" class="messages">
+          <p class="empty">开发验证入口：普通问题只请求补充非操作性证据；安全红线仅显示固定停止提示并创建模拟工单。禁止用于真实设备排障。</p>
+        </div>
+
+        <form id="case-form">
+          <label for="message">当前遇到了什么问题？</label>
+          <textarea
+            id="message"
+            name="message"
+            maxlength="8000"
+            placeholder="例如：屏幕右侧有一条黑边"
+            required
+          ></textarea>
+          <div class="form-footer">
+            <span id="run-status">尚未创建 Case</span>
+            <button type="submit">提交给 FixAgent</button>
+          </div>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

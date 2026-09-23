@@ -1,0 +1,3 @@
+# Fail closed when no approved Safety SOP matches
+
+When a Safety Redline is detected, FixAgent immediately stops ordinary troubleshooting and creates a `SAFETY_HANDOFF`. If no SKU-matched approved Safety SOP exists, it may emit only a pre-approved Universal Safety Message. V0 marks that message `NOT_APPROVED`, so the deterministic Safety Gate displays only “请停止操作该设备并等待人工处理。” until a SKU manufacturer or named safety owner approves more. The system must not invent handling instructions; this sacrifices diagnostic completeness to ensure that model knowledge cannot become unsupervised safety advice.

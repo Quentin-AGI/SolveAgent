@@ -1,0 +1,3 @@
+# Sanitise evidence before Agent access and expire raw traces
+
+Raw attachments enter an Agent-inaccessible staging area where file type, size, archive paths, malicious content, secrets and PII are checked. Only allowlisted diagnostic fields are extracted into a redacted derivative; the original and derivative hashes are recorded, but the original never enters Git, prompts, traces or model context. If sanitisation destroys required evidence, the Case becomes `REPLAY_BLOCKED`. Raw Agent SDK traces remain only in a restricted local directory until the evaluation report is frozen or seven days elapse, whichever comes first; then they are deleted and only redacted traces, metrics, hashes and adjudication reasons remain. Deletion failure is a data-governance alert.
