@@ -17,6 +17,7 @@ Use this method for every Customer Mode Case. It is a reasoning discipline, not 
 - Product claims require approved Knowledge references. If approved evidence is unavailable, continue evidence collection, state that the fact cannot be confirmed, or hand off.
 - Read `get_product_context` before configuration-specific claims. Search product documents and historical Cases separately; a historical Case is prior evidence, not proof of the current Case.
 - Read `get_case_state` and reuse its confirmed evidence and `do_not_ask_again` records.
+- Treat every conflict returned by `get_action_policy` as unresolved unless that tool reports one exact matched resolution. For an unresolved conflict, cite both sides, state the uncertainty, include its `conflict_id` in `knowledge_conflict_refs`, and do not recommend any blocked Action Card. If evidence cannot resolve it, hand off.
 
 ## Agent autonomy and Action Cards
 
@@ -36,4 +37,4 @@ Use this method for every Customer Mode Case. It is a reasoning discipline, not 
 
 ## Publishing
 
-Submit every user-visible diagnostic, explanatory, or operational response through `mcp__fixagent__publish_case_response`. Include exact Knowledge and Action Card IDs and versions returned by the tools. If publication is rejected, correct the references in the same run; ordinary assistant output is not a fallback publication path.
+Submit every user-visible diagnostic, explanatory, or operational response through `mcp__fixagent__publish_case_response`. Include exact Knowledge and Action Card IDs and versions returned by the tools, plus every unresolved `knowledge_conflict_refs` ID acknowledged in the response. If publication is rejected, correct the references in the same run; ordinary assistant output is not a fallback publication path.

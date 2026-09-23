@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const MAX_PUBLISHED_CLAIM_REFS = 20;
+export const MAX_PUBLISHED_CONFLICT_REFS = 8;
+
 export const knowledgeReferenceShape = z
   .object({
     knowledge_id: z.string().trim().min(1),
@@ -22,12 +25,17 @@ export const publishedCaseResponseShape = {
     .describe("The exact Markdown response that the user will see"),
   claim_refs: z
     .array(knowledgeReferenceShape)
-    .max(20)
+    .max(MAX_PUBLISHED_CLAIM_REFS)
     .describe("Approved Knowledge references supporting product claims"),
   action_card_refs: z
     .array(actionCardReferenceShape)
     .max(8)
     .describe("Applicable approved Action Cards used by the response"),
+  knowledge_conflict_refs: z
+    .array(z.string().trim().min(1))
+    .max(MAX_PUBLISHED_CONFLICT_REFS)
+    .optional()
+    .describe("Unresolved approved Knowledge conflicts acknowledged by the response"),
   response_type: z.enum(["EVIDENCE_REQUEST", "INFORMATION", "ACTION"]),
 };
 
@@ -36,7 +44,8 @@ export const publishedCaseResponseSchema = z
   .strict()
   .superRefine((response, context) => {
     const claimKeys = response.claim_refs.map(
-      (reference) => `${reference.knowledge_id}@${reference.version}`,
+      (reference) =>
+        JSON.stringify([reference.knowledge_id, reference.version]),
     );
     if (new Set(claimKeys).size !== claimKeys.length) {
       context.addIssue({
@@ -47,13 +56,23 @@ export const publishedCaseResponseSchema = z
     }
 
     const actionKeys = response.action_card_refs.map(
-      (reference) => `${reference.action_id}@${reference.version}`,
+      (reference) =>
+        JSON.stringify([reference.action_id, reference.version]),
     );
     if (new Set(actionKeys).size !== actionKeys.length) {
       context.addIssue({
         code: "custom",
         path: ["action_card_refs"],
         message: "Duplicate Action Card references are not allowed",
+      });
+    }
+
+    const conflictIds = response.knowledge_conflict_refs ?? [];
+    if (new Set(conflictIds).size !== conflictIds.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["knowledge_conflict_refs"],
+        message: "Duplicate Knowledge conflict references are not allowed",
       });
     }
 

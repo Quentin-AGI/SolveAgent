@@ -5,6 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import type { AgentRunRequest, AgentRuntime } from "./app.js";
 import {
+  deserializeFixAgentError,
+  serializeFixAgentError,
+  type SerializedFixAgentError,
+} from "./domain-error.js";
+import {
   providerRuntimeEnvironmentKeys,
   selectProviderCredentials,
 } from "./provider-profile.js";
@@ -43,7 +48,7 @@ type ParentMessage =
   | { type: "trace"; requestId: string; payload: unknown }
   | { type: "session"; requestId: string; payload: string }
   | { type: "complete" }
-  | { type: "error"; message: string };
+  | ({ type: "error" } & SerializedFixAgentError);
 
 const workerEntry = fileURLToPath(
   new URL(
@@ -115,8 +120,7 @@ export const createCaseWorkerRuntime = (): AgentRuntime => ({
                   type: "ack",
                   requestId: message.requestId,
                   ok: false,
-                  message:
-                    error instanceof Error ? error.message : "HOST_CALLBACK_FAILED",
+                  ...serializeFixAgentError(error, "HOST_CALLBACK_FAILED"),
                 });
               }
               return;
@@ -127,7 +131,7 @@ export const createCaseWorkerRuntime = (): AgentRuntime => ({
               return;
             }
             if (message.type === "error") {
-              settle(() => reject(new Error(message.message)));
+              settle(() => reject(deserializeFixAgentError(message)));
             }
           })
           .catch((error: unknown) =>

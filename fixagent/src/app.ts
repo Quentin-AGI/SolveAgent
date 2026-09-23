@@ -106,7 +106,7 @@ const parseResponsePlan = (
     typeof candidate.status !== "number" ||
     !("body" in candidate)
   ) {
-    throw new Error("CASE_CACHED_RESPONSE_INVALID");
+    throw new FixAgentDomainError("CASE_CACHED_RESPONSE_INVALID");
   }
   return { status: candidate.status, body: candidate.body };
 };
@@ -179,7 +179,7 @@ const readJson = async (request: IncomingMessage): Promise<unknown> => {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     byteLength += buffer.length;
     if (byteLength > 64 * 1024) {
-      throw new Error("REQUEST_TOO_LARGE");
+      throw new FixAgentDomainError("REQUEST_TOO_LARGE");
     }
     chunks.push(buffer);
   }
@@ -209,7 +209,7 @@ const appendCaseTrace = async ({
   const write = async (): Promise<void> => {
     const current = await readCaseState(caseWorkspaceRoot);
     if (current.worker_lease_id !== leaseId) {
-      throw new Error("CASE_WORKER_LEASE_LOST");
+      throw new FixAgentDomainError("CASE_WORKER_LEASE_LOST");
     }
     await appendFile(
       join(caseWorkspaceRoot, "trace", "events.jsonl"),
@@ -221,7 +221,7 @@ const appendCaseTrace = async ({
   try {
     await write();
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("CASE_")) {
+    if (error instanceof FixAgentDomainError) {
       throw error;
     }
     await write();
@@ -256,23 +256,24 @@ export const createFixAgentServer = ({
 
       if (request.method === "POST" && url.pathname === "/api/cases") {
         const createBody = z
-          .object({ cutoff_at: z.string().datetime().optional() })
+          .object({ evaluation_case_id: z.string().min(1).optional() })
           .strict()
           .parse(await readJson(request));
         if (
           activeKnowledgeSnapshot.mode === "EVALUATION" &&
-          activeKnowledgeSnapshot.documents.length > 0 &&
-          !createBody.cutoff_at
+          (activeKnowledgeSnapshot.documents.length > 0 ||
+            activeKnowledgeSnapshot.evaluation_cases.length > 0) &&
+          !createBody.evaluation_case_id
         ) {
-          sendJson(response, 400, { error: "CASE_CUTOFF_REQUIRED" });
+          sendJson(response, 400, { error: "EVALUATION_CASE_REQUIRED" });
           return;
         }
         let initialKnowledgeSnapshot = activeKnowledgeSnapshot;
-        if (createBody.cutoff_at) {
+        if (createBody.evaluation_case_id) {
           try {
             initialKnowledgeSnapshot = materializeCaseKnowledgeSnapshot(
               activeKnowledgeSnapshot,
-              createBody.cutoff_at,
+              createBody.evaluation_case_id,
             );
           } catch (error) {
             if (error instanceof FixAgentDomainError) {
@@ -347,6 +348,8 @@ export const createFixAgentServer = ({
           case_id: caseId,
           knowledge_snapshot_id: initialKnowledgeSnapshot.snapshot_id,
           cutoff_at: initialKnowledgeSnapshot.cutoff_at,
+          evaluation_case_id:
+            initialKnowledgeSnapshot.case_binding?.evaluation_case_id ?? null,
         });
         return;
       }
@@ -364,7 +367,9 @@ export const createFixAgentServer = ({
         let caseState: CaseState;
         try {
           caseState = await readCaseState(caseWorkspaceRoot);
-          if (caseState.case_id !== caseId) throw new Error("CASE_ID_MISMATCH");
+          if (caseState.case_id !== caseId) {
+            throw new FixAgentDomainError("CASE_ID_MISMATCH");
+          }
         } catch (error) {
           if (
             error instanceof Error &&
@@ -467,7 +472,9 @@ export const createFixAgentServer = ({
                   "CRITICAL_OPERATIONAL_ERROR: provider mismatch trace unavailable",
                 );
               }
-              throw new Error("FROZEN_PROVIDER_PROFILE_MISMATCH");
+              throw new FixAgentDomainError(
+                "FROZEN_PROVIDER_PROFILE_MISMATCH",
+              );
             }
             if (!knowledgeSnapshotMatches) {
               await commitCaseEvent({
@@ -481,7 +488,9 @@ export const createFixAgentServer = ({
                 metadata: { code: "FROZEN_KNOWLEDGE_SNAPSHOT_MISMATCH" },
                 workerLeaseId: lease.lease_id,
               });
-              throw new Error("FROZEN_KNOWLEDGE_SNAPSHOT_MISMATCH");
+              throw new FixAgentDomainError(
+                "FROZEN_KNOWLEDGE_SNAPSHOT_MISMATCH",
+              );
             }
             if (publishedBeforeCompletion) {
               const recoveredResponse = validateResponseForState(
@@ -632,6 +641,12 @@ export const createFixAgentServer = ({
                       eventType: "RESPONSE_PUBLISHED",
                       patch: {
                         last_response_type: parsed.response_type,
+                        knowledge_conflict_ids: [
+                          ...new Set([
+                            ...current.knowledge_conflict_ids,
+                            ...(parsed.knowledge_conflict_refs ?? []),
+                          ]),
+                        ],
                       },
                       requestHash,
                       result: parsed,
@@ -791,8 +806,11 @@ export const createFixAgentServer = ({
         sendJson(response, 400, { error: "INVALID_REQUEST" });
         return;
       }
-      if (error instanceof Error && error.message === "REQUEST_TOO_LARGE") {
-        sendJson(response, 413, { error: error.message });
+      if (
+        error instanceof FixAgentDomainError &&
+        error.code === "REQUEST_TOO_LARGE"
+      ) {
+        sendJson(response, 413, { error: error.code });
         return;
       }
       if (error instanceof AgentResponseRejectedError) {
@@ -804,22 +822,22 @@ export const createFixAgentServer = ({
         return;
       }
       if (
-        error instanceof Error &&
-        error.message === "CASE_WORKER_LEASE_CONFLICT"
+        error instanceof FixAgentDomainError &&
+        error.code === "CASE_WORKER_LEASE_CONFLICT"
       ) {
         sendJson(response, 409, { error: "CASE_BUSY" });
         return;
       }
       if (
-        error instanceof Error &&
-        error.message === "CASE_IDEMPOTENCY_CONFLICT"
+        error instanceof FixAgentDomainError &&
+        error.code === "CASE_IDEMPOTENCY_CONFLICT"
       ) {
         sendJson(response, 409, { error: "CASE_IDEMPOTENCY_CONFLICT" });
         return;
       }
       if (
-        error instanceof Error &&
-        error.message.startsWith("CASE_REVISION_CONFLICT")
+        error instanceof FixAgentDomainError &&
+        error.code === "CASE_REVISION_CONFLICT"
       ) {
         sendJson(response, 409, { error: "CASE_REVISION_CONFLICT" });
         return;

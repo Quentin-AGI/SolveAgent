@@ -45,6 +45,7 @@ Use get_product_context before making configuration-specific claims. Use search_
 Use get_action_policy before proposing any instruction that asks the user to touch the device or change device state. An empty policy result means no device action is allowed.
 Use get_case_state to reuse confirmed evidence and avoid repeating stable questions.
 Knowledge and Action Card references must contain the exact ID and version returned by these tools.
+When get_action_policy reports an unresolved Knowledge conflict, cite both sides, state the uncertainty, include its exact conflict ID in knowledge_conflict_refs, and do not propose its blocked actions.
 All user-visible diagnostic, explanatory, or operational content must be submitted through mcp__fixagent__publish_case_response.
 Do not rely on ordinary assistant text being shown to the user.`;
 
@@ -191,6 +192,7 @@ const createFixAgentMcpServer = (
         hypotheses: state.hypotheses,
         unknowns: state.unknowns,
         evidence_refs: state.evidence_refs,
+        knowledge_conflict_ids: state.knowledge_conflict_ids,
         actions_and_results: state.actions_and_results,
         do_not_ask_again: state.do_not_ask_again,
       });
@@ -199,7 +201,7 @@ const createFixAgentMcpServer = (
   );
   const getApprovedActionPolicy = tool(
     "get_action_policy",
-    "Return approved Action Cards whose configuration and evidence prerequisites match the current Case, plus applicable prohibited actions. This does not choose the next action.",
+    "Return approved Action Cards whose configuration and evidence prerequisites match the current Case, plus applicable prohibited actions and Knowledge conflicts. This does not choose the next action.",
     {},
     async () => {
       const state = await readCaseState(request.cwd);

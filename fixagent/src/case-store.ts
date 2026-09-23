@@ -15,6 +15,8 @@ import { join } from "node:path";
 
 import { z } from "zod";
 
+import { FixAgentDomainError } from "./domain-error.js";
+
 const stateSchema = z.object({
   schema_version: z.literal("fixagent.case-state.v0"),
   case_id: z.string().min(1),
@@ -43,6 +45,7 @@ const stateSchema = z.object({
   hypotheses: z.array(z.unknown()),
   unknowns: z.array(z.unknown()),
   evidence_refs: z.array(z.string()),
+  knowledge_conflict_ids: z.array(z.string()),
   actions_and_results: z.array(z.unknown()),
   awaiting_action_id: z.string().nullable(),
   no_progress_count: z.number().int().nonnegative(),
@@ -98,7 +101,7 @@ const withContentHash = <T extends object>(value: T): T & { content_hash: string
 const verifyHash = <T extends { content_hash: string }>(value: T): void => {
   const { content_hash: contentHash, ...withoutHash } = value;
   if (sha256(JSON.stringify(withoutHash)) !== contentHash) {
-    throw new Error("CASE_STORE_HASH_MISMATCH");
+    throw new FixAgentDomainError("CASE_STORE_HASH_MISMATCH");
   }
 };
 
@@ -119,7 +122,7 @@ const withOneStorageRetry = async <T>(operation: () => Promise<T>): Promise<T> =
     const isDomainFailure =
       error instanceof z.ZodError ||
       error instanceof SyntaxError ||
-      (error instanceof Error && error.message.startsWith("CASE_"));
+      error instanceof FixAgentDomainError;
     if (isDomainFailure) throw error;
     return operation();
   }
@@ -143,7 +146,7 @@ const readCaseEvents = async (caseWorkspaceRoot: string): Promise<CaseEvent[]> =
       event.state_after.state_revision !== event.revision ||
       event.state_after.case_id !== event.case_id
     ) {
-      throw new Error("CASE_EVENT_LOG_INVALID_SEQUENCE");
+      throw new FixAgentDomainError("CASE_EVENT_LOG_INVALID_SEQUENCE");
     }
   });
   return events;
@@ -154,7 +157,7 @@ const readCaseStateOnce = async (
 ): Promise<CaseState> => {
   const events = await readCaseEvents(caseWorkspaceRoot);
   const latestEvent = events.at(-1);
-  if (!latestEvent) throw new Error("CASE_EVENT_LOG_EMPTY");
+  if (!latestEvent) throw new FixAgentDomainError("CASE_EVENT_LOG_EMPTY");
 
   try {
     const state = stateSchema.parse(
@@ -162,14 +165,14 @@ const readCaseStateOnce = async (
     );
     verifyHash(state);
     if (state.case_id !== latestEvent.case_id) {
-      throw new Error("CASE_ID_MISMATCH");
+      throw new FixAgentDomainError("CASE_ID_MISMATCH");
     }
     if (state.state_revision > latestEvent.revision) {
-      throw new Error("CASE_STATE_AHEAD_OF_EVENT_LOG");
+      throw new FixAgentDomainError("CASE_STATE_AHEAD_OF_EVENT_LOG");
     }
     if (state.state_revision === latestEvent.revision) {
       if (state.content_hash !== latestEvent.state_after.content_hash) {
-        throw new Error("CASE_STATE_EVENT_MISMATCH");
+        throw new FixAgentDomainError("CASE_STATE_EVENT_MISMATCH");
       }
       return state;
     }
@@ -185,9 +188,9 @@ const readCaseStateOnce = async (
         error.code === "ENOENT") ||
       error instanceof SyntaxError ||
       error instanceof z.ZodError ||
-      (error instanceof Error &&
+      (error instanceof FixAgentDomainError &&
         ["CASE_STORE_HASH_MISMATCH", "CASE_STATE_EVENT_MISMATCH"].includes(
-          error.message,
+          error.code,
         ));
     if (projectionCanBeRebuilt) {
       await writeJsonAtomic(
@@ -226,14 +229,17 @@ const createInitialCaseStateOnce = async ({
 }: CreateInitialCaseStateInput): Promise<CaseState> => {
   try {
     const existing = await readCaseState(caseWorkspaceRoot);
-    if (existing.case_id !== caseId) throw new Error("CASE_ID_MISMATCH");
+    if (existing.case_id !== caseId) {
+      throw new FixAgentDomainError("CASE_ID_MISMATCH");
+    }
     return existing;
   } catch (error) {
     const absent =
       (error instanceof Error &&
         "code" in error &&
         error.code === "ENOENT") ||
-      (error instanceof Error && error.message === "CASE_EVENT_LOG_EMPTY");
+      (error instanceof FixAgentDomainError &&
+        error.code === "CASE_EVENT_LOG_EMPTY");
     if (!absent) throw error;
   }
 
@@ -260,6 +266,7 @@ const createInitialCaseStateOnce = async ({
     hypotheses: [],
     unknowns: [],
     evidence_refs: [],
+    knowledge_conflict_ids: [],
     actions_and_results: [],
     awaiting_action_id: null,
     no_progress_count: 0,
@@ -323,9 +330,11 @@ const commitCaseEventOnce = async ({
   workerLeaseId,
 }: CommitCaseEventInput): Promise<{ state: CaseState; event: CaseEvent }> => {
   const current = await readCaseState(caseWorkspaceRoot);
-  if (current.case_id !== caseId) throw new Error("CASE_ID_MISMATCH");
+  if (current.case_id !== caseId) {
+    throw new FixAgentDomainError("CASE_ID_MISMATCH");
+  }
   if (workerLeaseId && current.worker_lease_id !== workerLeaseId) {
-    throw new Error("CASE_WORKER_LEASE_LOST");
+    throw new FixAgentDomainError("CASE_WORKER_LEASE_LOST");
   }
 
   const events = await readCaseEvents(caseWorkspaceRoot);
@@ -342,14 +351,15 @@ const commitCaseEventOnce = async ({
       (requestHash !== undefined && repeated.request_hash !== requestHash) ||
       !repeatedResultMatches
     ) {
-      throw new Error("CASE_IDEMPOTENCY_CONFLICT");
+      throw new FixAgentDomainError("CASE_IDEMPOTENCY_CONFLICT");
     }
     return { state: repeated.state_after, event: repeated };
   }
 
   if (current.state_revision !== expectedRevision) {
-    throw new Error(
-      `CASE_REVISION_CONFLICT: expected ${expectedRevision}, actual ${current.state_revision}`,
+    throw new FixAgentDomainError(
+      "CASE_REVISION_CONFLICT",
+      `expected ${expectedRevision}, actual ${current.state_revision}`,
     );
   }
 
@@ -411,7 +421,7 @@ const readCaseEventByIdempotencyKeyOnce = async ({
   );
   if (!event) return undefined;
   if (event.case_id !== caseId || event.request_hash !== requestHash) {
-    throw new Error("CASE_IDEMPOTENCY_CONFLICT");
+    throw new FixAgentDomainError("CASE_IDEMPOTENCY_CONFLICT");
   }
   return event;
 };
@@ -506,7 +516,8 @@ const leaseHeartbeatIsCurrent = async (
       isMissingPathError(error) ||
       error instanceof SyntaxError ||
       error instanceof z.ZodError ||
-      (error instanceof Error && error.message === "CASE_STORE_HASH_MISMATCH")
+      (error instanceof FixAgentDomainError &&
+        error.code === "CASE_STORE_HASH_MISMATCH")
     ) {
       return false;
     }
@@ -533,7 +544,9 @@ const readLiveLeaseCandidates = async (
     try {
       const lease = leaseSchema.parse(JSON.parse(await readlink(path)));
       verifyHash(lease);
-      if (lease.case_id !== caseId) throw new Error("CASE_ID_MISMATCH");
+      if (lease.case_id !== caseId) {
+        throw new FixAgentDomainError("CASE_ID_MISMATCH");
+      }
       if (!(await leaseHeartbeatIsCurrent(path, lease))) {
         await removeLeaseCandidate(path);
         continue;
@@ -590,7 +603,7 @@ const acquireLeaseFile = async (
       oldestTimestampIsTied ||
       winner.lease.lease_id !== lease.lease_id
     ) {
-      throw new Error("CASE_WORKER_LEASE_CONFLICT");
+      throw new FixAgentDomainError("CASE_WORKER_LEASE_CONFLICT");
     }
     const heartbeatTimer = setInterval(() => {
       void writeLeaseHeartbeat(leasePath, lease).catch(() => undefined);
@@ -631,7 +644,7 @@ const releaseLeaseFile = async (
   }
   verifyHash(existing);
   if (existing.lease_id !== leaseId) {
-    throw new Error("CASE_WORKER_LEASE_OWNERSHIP_MISMATCH");
+    throw new FixAgentDomainError("CASE_WORKER_LEASE_OWNERSHIP_MISMATCH");
   }
   await removeLeaseCandidate(leasePath);
 };

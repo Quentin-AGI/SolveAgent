@@ -22,6 +22,7 @@ import { commitCaseEvent, readCaseState } from "../src/case-store.js";
 import {
   createKnowledgeSnapshot,
   VEHICLE_SAFELY_PARKED_EVIDENCE_REF,
+  type KnowledgeSnapshotInput,
 } from "../src/knowledge-store.js";
 import { buildFrozenProviderProfile } from "../src/provider-profile.js";
 
@@ -46,17 +47,29 @@ const testProviderProfile = (
     FIXAGENT_EXPECTED_OBSERVED_MODEL_ID: modelId,
   });
 
-const testKnowledgeSnapshot = () => {
+const testKnowledgeSnapshotInput = (): KnowledgeSnapshotInput => {
   const applicability = {
     configuration_ids: ["RPI4_7IN"],
     software_versions: ["20250108"],
     regions: ["GLOBAL"],
   };
-  return createKnowledgeSnapshot({
+  return {
     snapshot_id: "TEST_EVAL_SNAPSHOT",
     mode: "EVALUATION",
     created_at: "2026-09-23T00:00:00.000Z",
     cutoff_at: "2026-09-22T23:59:59.999Z",
+    evaluation_cases: [
+      {
+        evaluation_case_id: "TARGET-EARLY",
+        target_issue_id: "issue-100",
+        issue_created_at: "2026-09-19T23:59:59.000Z",
+      },
+      {
+        evaluation_case_id: "TARGET-LATE",
+        target_issue_id: "issue-200",
+        issue_created_at: "2026-09-21T00:00:00.000Z",
+      },
+    ],
     product_context: {
       product_family: "CRANKSHAFT_RASPBERRY_PI_DISPLAY",
       configuration_id: "RPI4_7IN",
@@ -106,7 +119,43 @@ const testKnowledgeSnapshot = () => {
       },
     ],
     prohibited_actions: [],
+    knowledge_conflicts: [],
+  };
+};
+
+const testKnowledgeSnapshot = () =>
+  createKnowledgeSnapshot(testKnowledgeSnapshotInput());
+
+const testConflictedKnowledgeSnapshot = () => {
+  const input = testKnowledgeSnapshotInput();
+  const firstDocument = input.documents[0];
+  assert.ok(firstDocument);
+  const conflictingDocument = structuredClone(firstDocument);
+  conflictingDocument.knowledge_id = "DOC-DISPLAY-002";
+  conflictingDocument.title = "Conflicting test display procedure";
+  conflictingDocument.text = "A conflicting fixture-only display procedure.";
+  conflictingDocument.source = {
+    ...conflictingDocument.source,
+    uri: "https://example.test/display-conflict",
+    title: "Conflicting test source",
+  };
+  input.documents.push(conflictingDocument);
+  input.knowledge_conflicts.push({
+    conflict_id: "CONFLICT-DISPLAY-CONFIG",
+    description: "The approved display procedures cannot both apply.",
+    source_refs: [
+      { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+      { knowledge_id: "DOC-DISPLAY-002", version: "1" },
+    ],
+    applicability: firstDocument.applicability,
+    blocked_action_ids: ["ACTION-DISPLAY-TEST"],
+    resolutions: [],
+    approval_status: "EVAL_APPROVED",
+    approved_by: "test-data-owner",
+    approved_at: "2026-09-22T18:00:00.000Z",
+    approval_authority: "EVALUATION_DATA_OWNER",
   });
+  return createKnowledgeSnapshot(input);
 };
 
 const makeDirectoriesRemovable = async (directory: string): Promise<void> => {
@@ -536,7 +585,7 @@ test("host publishes an action only when its frozen Knowledge and Action Card re
     const created = await fetch(new URL("/api/cases", app.url), {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cutoff_at: "2026-09-21T00:00:00.000Z" }),
+      body: JSON.stringify({ evaluation_case_id: "TARGET-LATE" }),
     });
     const {
       case_id: caseId,
@@ -594,7 +643,58 @@ test("host publishes an action only when its frozen Knowledge and Action Card re
   }
 });
 
-test("evaluation Cases require and independently materialize their own cutoff", async () => {
+test("host records an acknowledged unresolved Knowledge conflict", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const runtime: AgentRuntime = {
+    async run(request) {
+      await request.publish({
+        message_markdown:
+          "两份已批准资料相互冲突，因此当前显示配置仍不确定。",
+        claim_refs: [
+          { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+          { knowledge_id: "DOC-DISPLAY-002", version: "1" },
+        ],
+        action_card_refs: [],
+        knowledge_conflict_refs: ["CONFLICT-DISPLAY-CONFIG"],
+        response_type: "INFORMATION",
+      });
+    },
+  };
+  const app = createFixAgentServer({
+    runtime,
+    workspaceRoot,
+    knowledgeSnapshot: testConflictedKnowledgeSnapshot(),
+  });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ evaluation_case_id: "TARGET-LATE" }),
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "哪份显示配置适用于我？" }),
+      },
+    );
+
+    assert.equal(replied.status, 200);
+    assert.deepEqual(
+      (await readCaseState(join(workspaceRoot, caseId))).knowledge_conflict_ids,
+      ["CONFLICT-DISPLAY-CONFIG"],
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("evaluation Cases derive their immutable cutoff from the approved Case catalog", async () => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
   temporaryDirectories.push(workspaceRoot);
   const app = createFixAgentServer({
@@ -605,28 +705,52 @@ test("evaluation Cases require and independently materialize their own cutoff", 
   await app.listen();
 
   try {
-    const missingCutoff = await fetch(new URL("/api/cases", app.url), {
+    const missingCase = await fetch(new URL("/api/cases", app.url), {
       method: "POST",
     });
-    assert.equal(missingCutoff.status, 400);
-    assert.deepEqual(await missingCutoff.json(), {
-      error: "CASE_CUTOFF_REQUIRED",
+    assert.equal(missingCase.status, 400);
+    assert.deepEqual(await missingCase.json(), {
+      error: "EVALUATION_CASE_REQUIRED",
     });
 
-    const createAt = async (cutoffAt: string) => {
+    const callerControlledCutoff = await fetch(
+      new URL("/api/cases", app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          evaluation_case_id: "TARGET-LATE",
+          cutoff_at: "2026-09-22T00:00:00.000Z",
+        }),
+      },
+    );
+    assert.equal(callerControlledCutoff.status, 400);
+
+    const unknownCase = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ evaluation_case_id: "TARGET-UNKNOWN" }),
+    });
+    assert.equal(unknownCase.status, 400);
+    assert.deepEqual(await unknownCase.json(), {
+      error: "EVALUATION_CASE_NOT_FOUND",
+    });
+
+    const createCase = async (evaluationCaseId: string) => {
       const response = await fetch(new URL("/api/cases", app.url), {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cutoff_at: cutoffAt }),
+        body: JSON.stringify({ evaluation_case_id: evaluationCaseId }),
       });
       assert.equal(response.status, 201);
       return (await response.json()) as {
         case_id: string;
         knowledge_snapshot_id: string;
+        cutoff_at: string;
       };
     };
-    const early = await createAt("2026-09-19T23:59:59.000Z");
-    const later = await createAt("2026-09-21T00:00:00.000Z");
+    const early = await createCase("TARGET-EARLY");
+    const later = await createCase("TARGET-LATE");
     const readFrozen = async (caseId: string) =>
       JSON.parse(
         await readFile(
@@ -639,6 +763,8 @@ test("evaluation Cases require and independently materialize their own cutoff", 
 
     assert.equal(earlySnapshot.documents.length, 0);
     assert.equal(laterSnapshot.documents.length, 1);
+    assert.equal(early.cutoff_at, "2026-09-19T23:59:59.000Z");
+    assert.equal(later.cutoff_at, "2026-09-21T00:00:00.000Z");
     assert.notEqual(early.knowledge_snapshot_id, later.knowledge_snapshot_id);
     assert.notEqual(earlySnapshot.content_hash, laterSnapshot.content_hash);
   } finally {

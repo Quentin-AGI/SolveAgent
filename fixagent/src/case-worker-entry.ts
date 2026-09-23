@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 
 import { createClaudeAgentRuntime } from "./claude-agent-runtime.js";
+import {
+  deserializeFixAgentError,
+  serializeFixAgentError,
+} from "./domain-error.js";
 
 interface RunMessage {
   type: "run";
@@ -15,6 +19,7 @@ interface AckMessage {
   requestId: string;
   ok: boolean;
   message?: string;
+  code?: string;
 }
 
 const pending = new Map<
@@ -46,7 +51,14 @@ process.on("message", (untrustedMessage) => {
     if (!callback) return;
     pending.delete(message.requestId);
     if (message.ok) callback.resolve();
-    else callback.reject(new Error(message.message ?? "HOST_CALLBACK_FAILED"));
+    else {
+      callback.reject(
+        deserializeFixAgentError({
+          message: message.message ?? "HOST_CALLBACK_FAILED",
+          ...(message.code ? { code: message.code } : {}),
+        }),
+      );
+    }
     return;
   }
 
@@ -65,7 +77,7 @@ process.on("message", (untrustedMessage) => {
     .catch((error: unknown) =>
       sendToParent({
         type: "error",
-        message: error instanceof Error ? error.message : "CASE_WORKER_FAILED",
+        ...serializeFixAgentError(error, "CASE_WORKER_FAILED"),
       }),
     )
     .finally(() => {

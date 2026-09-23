@@ -30,6 +30,18 @@ const fixtureInput = (): KnowledgeSnapshotInput => ({
   mode: "EVALUATION",
   created_at: "2026-09-23T00:00:00.000Z",
   cutoff_at: "2026-09-22T23:59:59.999Z",
+  evaluation_cases: [
+    {
+      evaluation_case_id: "TARGET-EARLY",
+      target_issue_id: "issue-100",
+      issue_created_at: "2026-09-20T23:59:59.000Z",
+    },
+    {
+      evaluation_case_id: "TARGET-LATE",
+      target_issue_id: "issue-200",
+      issue_created_at: "2026-09-21T23:59:59.000Z",
+    },
+  ],
   product_context: {
     product_family: "CRANKSHAFT_RASPBERRY_PI_DISPLAY",
     configuration_id: "RPI4_7IN",
@@ -60,11 +72,17 @@ const fixtureInput = (): KnowledgeSnapshotInput => ({
       knowledge_id: "CASE-279",
       version: "1",
       kind: "HISTORICAL_CASE",
-      document_type: "CASE_REPORT",
+      document_type: "CASE_CONTENT",
       title: "Display border case",
       text: "A historical display border report.",
       tags: ["display", "border"],
       applicability,
+      case_content: {
+        issue_id: "issue-279",
+        content_id: "issue-279:body",
+        content_role: "ISSUE_BODY",
+        related_issue_ids: [],
+      },
       source: {
         uri: "https://example.test/cases/279",
         title: "Historical case 279",
@@ -100,6 +118,7 @@ const fixtureInput = (): KnowledgeSnapshotInput => ({
       ...evaluationApproval,
     },
   ],
+  knowledge_conflicts: [],
 });
 
 test("Knowledge Snapshot hashes entries and rejects tampering", () => {
@@ -118,6 +137,13 @@ test("Knowledge Snapshot hashes entries and rejects tampering", () => {
 });
 
 test("Knowledge Snapshot enforces approval mode and source cutoff", () => {
+  const missingCatalog = fixtureInput();
+  missingCatalog.evaluation_cases = [];
+  assert.throws(
+    () => createKnowledgeSnapshot(missingCatalog),
+    /EVALUATION_CASE_CATALOG_REQUIRED/,
+  );
+
   const wrongApproval = fixtureInput();
   const document = wrongApproval.documents[0];
   assert.ok(document);
@@ -144,6 +170,7 @@ test("Knowledge Snapshot enforces approval mode and source cutoff", () => {
 
   const customer = fixtureInput();
   customer.mode = "CUSTOMER";
+  customer.evaluation_cases = [];
   for (const entry of [
     ...customer.documents,
     ...customer.action_cards,
@@ -204,11 +231,167 @@ test("Action policy requires current Case evidence and keeps prohibitions visibl
   assert.equal(vetoed.action_cards.length, 0);
 });
 
+test("unresolved Knowledge conflicts cite both sides and block dependent actions", () => {
+  const input = fixtureInput();
+  const conflictingDocument = structuredClone(input.documents[0]);
+  assert.ok(conflictingDocument);
+  conflictingDocument.knowledge_id = "DOC-DISPLAY-002";
+  conflictingDocument.title = "Conflicting display settings";
+  conflictingDocument.text = "An incompatible approved display configuration.";
+  conflictingDocument.source = {
+    ...conflictingDocument.source,
+    uri: "https://example.test/docs/display-conflict",
+    title: "Conflicting display documentation",
+  };
+  input.documents.push(conflictingDocument);
+  input.knowledge_conflicts.push({
+    conflict_id: "CONFLICT-DISPLAY-CONFIG",
+    description: "The approved display configuration sources cannot both apply.",
+    source_refs: [
+      { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+      { knowledge_id: "DOC-DISPLAY-002", version: "1" },
+    ],
+    applicability,
+    blocked_action_ids: ["ACTION-DISPLAY-RESTART"],
+    resolutions: [
+      {
+        resolution_id: "DISPLAY-CONFIG-CONFIRMED",
+        required_evidence_refs: ["case:display_config_confirmed"],
+        selected_source_refs: [
+          { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+        ],
+        allowed_action_ids: ["ACTION-DISPLAY-RESTART"],
+      },
+    ],
+    ...evaluationApproval,
+  });
+  const snapshot = createKnowledgeSnapshot(input);
+
+  const unresolved = getActionPolicy(snapshot, [
+    VEHICLE_SAFELY_PARKED_EVIDENCE_REF,
+  ]);
+  assert.equal(unresolved.action_cards.length, 0);
+  assert.equal(
+    unresolved.knowledge_conflicts[0]?.resolution_status,
+    "UNRESOLVED",
+  );
+
+  const incompleteInformation = {
+    message_markdown: "The first approved source recommends this configuration.",
+    claim_refs: [{ knowledge_id: "DOC-DISPLAY-001", version: "1" }],
+    action_card_refs: [],
+    response_type: "INFORMATION",
+  };
+  assert.throws(
+    () =>
+      validatePublishedCaseResponse({
+        candidate: incompleteInformation,
+        snapshot,
+        caseKnowledgeSnapshotId: snapshot.snapshot_id,
+        caseKnowledgeSnapshotHash: snapshot.content_hash,
+        evidenceRefs: [],
+      }),
+    /KNOWLEDGE_CONFLICT_ACKNOWLEDGEMENT_REQUIRED/,
+  );
+
+  const acknowledgedInformation = {
+    ...incompleteInformation,
+    message_markdown: "The two approved sources conflict, so the configuration is uncertain.",
+    claim_refs: [
+      { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+      { knowledge_id: "DOC-DISPLAY-002", version: "1" },
+    ],
+    knowledge_conflict_refs: ["CONFLICT-DISPLAY-CONFIG"],
+  };
+  assert.deepEqual(
+    validatePublishedCaseResponse({
+      candidate: acknowledgedInformation,
+      snapshot,
+      caseKnowledgeSnapshotId: snapshot.snapshot_id,
+      caseKnowledgeSnapshotHash: snapshot.content_hash,
+      evidenceRefs: [],
+    }),
+    acknowledgedInformation,
+  );
+
+  const resolved = getActionPolicy(snapshot, [
+    VEHICLE_SAFELY_PARKED_EVIDENCE_REF,
+    "case:display_config_confirmed",
+  ]);
+  assert.equal(resolved.action_cards.length, 1);
+  assert.equal(
+    resolved.knowledge_conflicts[0]?.resolution_status,
+    "RESOLVED",
+  );
+});
+
+test("Case cutoff prunes unavailable actions from surviving Knowledge conflicts", () => {
+  const input = fixtureInput();
+  const firstDocument = input.documents[0];
+  const firstAction = input.action_cards[0];
+  assert.ok(firstDocument && firstAction);
+
+  const conflictingDocument = structuredClone(firstDocument);
+  conflictingDocument.knowledge_id = "DOC-DISPLAY-002";
+  conflictingDocument.source = {
+    ...conflictingDocument.source,
+    uri: "https://example.test/docs/display-conflict",
+  };
+  const lateSop = structuredClone(firstDocument);
+  lateSop.knowledge_id = "DOC-LATE-SOP";
+  lateSop.document_type = "ACTION_SOP";
+  lateSop.source = {
+    ...lateSop.source,
+    uri: "https://example.test/docs/late-sop",
+    published_at: "2026-09-21T12:00:00.000Z",
+  };
+  input.documents.push(conflictingDocument, lateSop);
+
+  const lateAction = structuredClone(firstAction);
+  lateAction.action_id = "ACTION-LATE";
+  lateAction.source_ref = { knowledge_id: "DOC-LATE-SOP", version: "1" };
+  input.action_cards.push(lateAction);
+  input.knowledge_conflicts.push({
+    conflict_id: "CONFLICT-WITH-LATE-ACTION",
+    description: "The early sources conflict about a later action.",
+    source_refs: [
+      { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+      { knowledge_id: "DOC-DISPLAY-002", version: "1" },
+    ],
+    applicability,
+    blocked_action_ids: ["ACTION-LATE"],
+    resolutions: [
+      {
+        resolution_id: "LATE-ACTION-RESOLUTION",
+        required_evidence_refs: ["case:late_action_resolution"],
+        selected_source_refs: [
+          { knowledge_id: "DOC-DISPLAY-001", version: "1" },
+        ],
+        allowed_action_ids: ["ACTION-LATE"],
+      },
+    ],
+    ...evaluationApproval,
+  });
+
+  const materialized = materializeCaseKnowledgeSnapshot(
+    createKnowledgeSnapshot(input),
+    "TARGET-EARLY",
+  );
+  const conflict = materialized.knowledge_conflicts[0];
+  assert.ok(conflict);
+  assert.deepEqual(conflict.blocked_action_ids, []);
+  assert.deepEqual(conflict.resolutions[0]?.allowed_action_ids, []);
+  assert.equal(
+    materialized.action_cards.some((action) => action.action_id === "ACTION-LATE"),
+    false,
+  );
+});
+
 test("Case-specific cutoff filters knowledge by publication time, not retrieval time", () => {
   const snapshot = createKnowledgeSnapshot(fixtureInput());
   const earlier = materializeCaseKnowledgeSnapshot(
     snapshot,
-    "2026-09-20T23:59:59.000Z",
+    "TARGET-EARLY",
   );
 
   assert.deepEqual(
@@ -222,9 +405,110 @@ test("Case-specific cutoff filters knowledge by publication time, not retrieval 
     () =>
       materializeCaseKnowledgeSnapshot(
         snapshot,
-        "2026-09-23T00:00:00.000Z",
+        "UNKNOWN-EVALUATION-CASE",
       ),
-    /CASE_KNOWLEDGE_CUTOFF_EXCEEDS_CORPUS/,
+    /EVALUATION_CASE_NOT_FOUND/,
+  );
+});
+
+test("Case materialization excludes the target Issue and all linked future-answer content", () => {
+  const input = fixtureInput();
+  const historical = input.documents[1];
+  assert.ok(historical);
+  historical.source.published_at = "2026-09-20T12:00:00.000Z";
+
+  const targetBody = structuredClone(historical);
+  targetBody.knowledge_id = "TARGET-ISSUE-BODY";
+  targetBody.case_content = {
+    issue_id: "issue-100",
+    content_id: "issue-100:body",
+    content_role: "ISSUE_BODY",
+    related_issue_ids: [],
+  };
+  const targetSolution = structuredClone(historical);
+  targetSolution.knowledge_id = "TARGET-ISSUE-SOLUTION";
+  targetSolution.case_content = {
+    issue_id: "issue-100",
+    content_id: "issue-100:solution",
+    content_role: "SOLUTION",
+    related_issue_ids: [],
+  };
+  const duplicate = structuredClone(historical);
+  duplicate.knowledge_id = "TARGET-DUPLICATE";
+  duplicate.case_content = {
+    issue_id: "issue-300",
+    content_id: "issue-300:body",
+    content_role: "DUPLICATE_ISSUE",
+    related_issue_ids: ["issue-100"],
+  };
+  const duplicateSolution = structuredClone(historical);
+  duplicateSolution.knowledge_id = "TARGET-DUPLICATE-SOLUTION";
+  duplicateSolution.case_content = {
+    issue_id: "issue-300",
+    content_id: "issue-300:solution",
+    content_role: "SOLUTION",
+    related_issue_ids: [],
+  };
+  const generatedFaq = structuredClone(historical);
+  generatedFaq.knowledge_id = "TARGET-GENERATED-FAQ";
+  generatedFaq.case_content = {
+    issue_id: "faq-100",
+    content_id: "faq-100:body",
+    content_role: "GENERATED_FAQ",
+    related_issue_ids: ["issue-300"],
+  };
+  const generatedFaqComment = structuredClone(historical);
+  generatedFaqComment.knowledge_id = "TARGET-GENERATED-FAQ-COMMENT";
+  generatedFaqComment.case_content = {
+    issue_id: "faq-100",
+    content_id: "faq-100:comment-1",
+    content_role: "COMMENT",
+    related_issue_ids: [],
+  };
+  const laterComment = structuredClone(historical);
+  laterComment.knowledge_id = "UNRELATED-LATE-COMMENT";
+  laterComment.source.published_at = "2026-09-21T12:00:00.000Z";
+  laterComment.case_content = {
+    issue_id: "issue-400",
+    content_id: "issue-400:comment-1",
+    content_role: "COMMENT",
+    related_issue_ids: [],
+  };
+  input.documents.push(
+    targetBody,
+    targetSolution,
+    duplicate,
+    duplicateSolution,
+    generatedFaq,
+    generatedFaqComment,
+    laterComment,
+  );
+
+  const materialized = materializeCaseKnowledgeSnapshot(
+    createKnowledgeSnapshot(input),
+    "TARGET-EARLY",
+  );
+
+  assert.deepEqual(
+    materialized.documents.map((document) => document.knowledge_id),
+    ["DOC-DISPLAY-001", "CASE-279"],
+  );
+  assert.deepEqual(materialized.case_binding, {
+    evaluation_case_id: "TARGET-EARLY",
+    target_issue_id: "issue-100",
+    issue_created_at: "2026-09-20T23:59:59.000Z",
+  });
+});
+
+test("Historical knowledge must be an attributable atomic Case content item", () => {
+  const invalid = fixtureInput();
+  const historical = invalid.documents[1];
+  assert.ok(historical);
+  delete historical.case_content;
+
+  assert.throws(
+    () => createKnowledgeSnapshot(invalid),
+    /KNOWLEDGE_DOCUMENT_TYPE_MISMATCH|Invalid input/,
   );
 });
 
@@ -311,5 +595,78 @@ test("publication accepts exact applicable references and rejects stale or inapp
         evidenceRefs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
       }),
     /FROZEN_KNOWLEDGE_SNAPSHOT_HASH_MISMATCH/,
+  );
+});
+
+test("reference lookup cannot collide when IDs or versions contain separators", () => {
+  const input = fixtureInput();
+  const document = input.documents[0];
+  const action = input.action_cards[0];
+  const prohibition = input.prohibited_actions[0];
+  assert.ok(document && action && prohibition);
+  document.knowledge_id = "DOC@V";
+  action.source_ref = { knowledge_id: "DOC@V", version: "1" };
+  prohibition.source_ref = { knowledge_id: "DOC@V", version: "1" };
+  const snapshot = createKnowledgeSnapshot(input);
+
+  assert.throws(
+    () =>
+      validatePublishedCaseResponse({
+        candidate: {
+          message_markdown: "This reference does not exist.",
+          claim_refs: [{ knowledge_id: "DOC", version: "V@1" }],
+          action_card_refs: [],
+          response_type: "INFORMATION",
+        },
+        snapshot,
+        caseKnowledgeSnapshotId: snapshot.snapshot_id,
+        caseKnowledgeSnapshotHash: snapshot.content_hash,
+        evidenceRefs: [],
+      }),
+    /KNOWLEDGE_REFERENCE_NOT_APPROVED_OR_APPLICABLE/,
+  );
+});
+
+test("Knowledge Snapshot rejects noncanonical IDs and unpublishable conflict components", () => {
+  const whitespace = fixtureInput();
+  const whitespaceDocument = whitespace.documents[0];
+  assert.ok(whitespaceDocument);
+  whitespaceDocument.knowledge_id = " DOC-DISPLAY-001 ";
+  assert.throws(
+    () => createKnowledgeSnapshot(whitespace),
+    /Identifiers cannot have surrounding whitespace/,
+  );
+
+  const oversized = fixtureInput();
+  const source = oversized.documents[0];
+  assert.ok(source);
+  const sourceRefs = [
+    { knowledge_id: source.knowledge_id, version: source.version },
+  ];
+  for (let index = 2; index <= 21; index += 1) {
+    const document = structuredClone(source);
+    document.knowledge_id = `DOC-DISPLAY-${String(index).padStart(3, "0")}`;
+    document.source = {
+      ...document.source,
+      uri: `https://example.test/docs/display-${index}`,
+    };
+    oversized.documents.push(document);
+    sourceRefs.push({
+      knowledge_id: document.knowledge_id,
+      version: document.version,
+    });
+  }
+  oversized.knowledge_conflicts.push({
+    conflict_id: "CONFLICT-TOO-LARGE-TO-PUBLISH",
+    description: "This conflict has more sources than one response can cite.",
+    source_refs: sourceRefs,
+    applicability,
+    blocked_action_ids: [],
+    resolutions: [],
+    ...evaluationApproval,
+  });
+  assert.throws(
+    () => createKnowledgeSnapshot(oversized),
+    /KNOWLEDGE_CONFLICT_COMPONENT_TOO_LARGE/,
   );
 });
