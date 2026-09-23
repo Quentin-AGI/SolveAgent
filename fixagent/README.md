@@ -13,6 +13,7 @@ The current slice provides:
 - in-process MCP tools for product context, approved product-document and historical-Case search, applicable Action Card policy, and current Case State;
 - `publish_case_response` as the only user-visible response path, with exact structured Knowledge and Action Card references validated again by the host process;
 - a minimal Case conversation UI carrying the mandatory `NON-SCORED · DATA_NO_GO` status;
+- a Codex-style model picker backed by a server-side provider registry, with the selected non-secret profile frozen into each Case;
 - startup checks for native Bash, Read, Edit, Write, the core Skill, and the SDK MCP server;
 - a deterministic pre-Agent text Safety Gate that emits only the frozen fallback sentence and atomically creates a clearly labelled simulated `SAFETY_HANDOFF`.
 - seven-day raw Trace expiry with an operational alert if deletion fails; report-freeze deletion will be added with the reporting subsystem.
@@ -44,3 +45,36 @@ pnpm dev
 ```
 
 The application defaults to <http://127.0.0.1:4174>. SDK events are written to the Case's private Trace; the HTTP response is created only after the Agent calls `mcp__fixagent__publish_case_response` and the deterministic publication boundary accepts it.
+
+## Model registry
+
+Use the model-settings button in the lower-left corner to configure Qwen, Kimi, Zhipu GLM, or DeepSeek with only an HTTPS API address and API Key. FixAgent applies the provider's managed runtime model automatically. The API Key is required on every save. The local UI supports creating, updating, removing, and selecting profiles for new Cases without a server restart. It writes active and frozen historical profiles to the private registry at `.runtime/provider-profiles.json` with mode `0600`; historical profiles reuse the latest saved Key, while removing a provider revokes its stored profiles. `FIXAGENT_PROVIDER_PROFILES_FILE` can override that location.
+
+The browser receives only sanitized display metadata from `/api/models`. Credentials are never returned and are copied only into the selected Case Worker. A model can be changed before a Case is created and remains locked for that Case afterward.
+
+```json
+{
+  "default_profile_id": "qwen",
+  "profiles": [
+    {
+      "id": "qwen",
+      "display_name": "通义千问",
+      "provider_label": "阿里云百炼",
+      "environment": {
+        "FIXAGENT_PROVIDER_ID": "qwen",
+        "ANTHROPIC_BASE_URL": "https://your-anthropic-compatible-endpoint.example",
+        "ANTHROPIC_AUTH_TOKEN": "replace-with-secret",
+        "FIXAGENT_MODEL": "replace-with-model-id",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL": "replace-with-model-id",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL": "replace-with-model-id",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL": "replace-with-model-id",
+        "ANTHROPIC_DEFAULT_FABLE_MODEL": "replace-with-model-id",
+        "FIXAGENT_PROVIDER_CAPABILITIES": "tools,vision",
+        "FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION": "replace-with-certified-version"
+      }
+    }
+  ]
+}
+```
+
+The JSON shape remains available for secret-management or deployment automation. Use the same object shape for `kimi`, `zhipu`, and `deepseek`, with endpoints and model IDs certified for the corresponding account. Profiles omitted from the private registry remain visible as `待配置` and cannot be selected. Do not commit the registry file.

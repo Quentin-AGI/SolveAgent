@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 export const CLAUDE_AGENT_SDK_PACKAGE_VERSION = "0.3.280";
+export const CLAUDE_CODE_VERSION = "2.1.280";
 
 export const providerRuntimeEnvironmentKeys = [
   "ANTHROPIC_BASE_URL",
@@ -59,6 +60,21 @@ export const normalizedProviderValue = (
 ): string | null =>
   value?.trim() ? value.trim() : null;
 
+export const isSecureProviderBaseUrl = (value: string): boolean => {
+  try {
+    const parsed = new URL(value);
+    return (
+      parsed.protocol === "https:" &&
+      !parsed.username &&
+      !parsed.password &&
+      !parsed.search &&
+      !parsed.hash
+    );
+  } catch {
+    return false;
+  }
+};
+
 export const buildFrozenProviderProfile = (
   environment: NodeJS.ProcessEnv,
 ): FrozenProviderProfile => {
@@ -85,6 +101,9 @@ export const buildFrozenProviderProfile = (
   const expectedClaudeCodeVersion =
     normalizedProviderValue(environment.FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION);
   const baseUrl = normalizedProviderValue(environment.ANTHROPIC_BASE_URL);
+  if (baseUrl && !isSecureProviderBaseUrl(baseUrl)) {
+    throw new Error("PROVIDER_BASE_URL_INVALID");
+  }
   const capabilities = (environment.FIXAGENT_PROVIDER_CAPABILITIES ?? "")
     .split(",")
     .map((capability) => capability.trim())

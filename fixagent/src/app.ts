@@ -41,9 +41,16 @@ import {
 import type { PublishedCaseResponse } from "./published-case-response.js";
 import {
   buildFrozenProviderProfile,
+  CLAUDE_CODE_VERSION,
   hashProviderProfile,
+  isSecureProviderBaseUrl,
   type FrozenProviderProfile,
 } from "./provider-profile.js";
+import {
+  findKnownProvider,
+  knownProviderCatalog,
+  type KnownProviderId,
+} from "./provider-catalog.js";
 import {
   createSafetyHandoff,
   detectSafetyRedline,
@@ -58,6 +65,7 @@ export interface AgentRunRequest {
   caseId: string;
   cwd: string;
   userMessage: string;
+  providerEnvironment?: NodeJS.ProcessEnv;
   sessionId?: string;
   publish(response: unknown): Promise<void>;
   saveSession(sessionId: string): Promise<void>;
@@ -74,6 +82,36 @@ export interface FixAgentServer {
   close(): Promise<void>;
 }
 
+export interface ProviderRuntimeProfile {
+  id: string;
+  display_name: string;
+  provider_label: string;
+  profile: FrozenProviderProfile;
+  environment: NodeJS.ProcessEnv;
+}
+
+export interface ModelConfigurationInput {
+  id: KnownProviderId;
+  anthropic_base_url: string;
+  model_id: string;
+  credential_type: "ANTHROPIC_AUTH_TOKEN" | "ANTHROPIC_API_KEY";
+  credential?: string;
+  expected_claude_code_version: string;
+  capabilities: string[];
+  make_default: boolean;
+}
+
+export interface ProviderRegistrySnapshot {
+  providerProfiles: readonly ProviderRuntimeProfile[];
+  historicalProviderProfiles?: readonly ProviderRuntimeProfile[];
+  defaultProviderProfileId?: string;
+}
+
+export interface ProviderRegistryEditor {
+  upsert(input: ModelConfigurationInput): Promise<ProviderRegistrySnapshot>;
+  remove(id: KnownProviderId): Promise<ProviderRegistrySnapshot>;
+}
+
 interface CreateFixAgentServerOptions {
   runtime: AgentRuntime;
   workspaceRoot: string;
@@ -81,6 +119,10 @@ interface CreateFixAgentServerOptions {
   skillFile?: string;
   safetyHandoffWriter?: typeof createSafetyHandoff;
   providerProfile?: FrozenProviderProfile;
+  providerProfiles?: readonly ProviderRuntimeProfile[];
+  historicalProviderProfiles?: readonly ProviderRuntimeProfile[];
+  defaultProviderProfileId?: string;
+  providerRegistryEditor?: ProviderRegistryEditor;
   knowledgeSnapshot?: KnowledgeSnapshot;
 }
 
@@ -197,6 +239,48 @@ const sendJson = (
   response.end(JSON.stringify(body));
 };
 
+const isLoopbackAddress = (address: string | undefined): boolean =>
+  Boolean(
+    address &&
+      (address === "::1" ||
+        address.startsWith("127.") ||
+        address.startsWith("::ffff:127.")),
+  );
+
+const isLoopbackHost = (host: string | undefined): boolean => {
+  if (!host) return false;
+  try {
+    const hostname = new URL(`http://${host}`).hostname;
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+};
+
+const isTrustedConfigurationRequest = (request: IncomingMessage): boolean => {
+  if (
+    !isLoopbackAddress(request.socket.remoteAddress) ||
+    !isLoopbackHost(request.headers.host)
+  ) {
+    return false;
+  }
+  const origin = request.headers.origin;
+  if (!origin) return true;
+  try {
+    const parsedOrigin = new URL(origin);
+    return (
+      ["http:", "https:"].includes(parsedOrigin.protocol) &&
+      parsedOrigin.host === request.headers.host
+    );
+  } catch {
+    return false;
+  }
+};
+
 const appendCaseTrace = async ({
   caseWorkspaceRoot,
   leaseId,
@@ -235,12 +319,139 @@ export const createFixAgentServer = ({
   skillFile = defaultSkillFile,
   safetyHandoffWriter = createSafetyHandoff,
   providerProfile,
+  providerProfiles,
+  historicalProviderProfiles,
+  defaultProviderProfileId,
+  providerRegistryEditor,
   knowledgeSnapshot = EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
 }: CreateFixAgentServerOptions): FixAgentServer => {
-  const activeProviderProfile =
+  const legacyProviderProfile =
     providerProfile ?? buildFrozenProviderProfile(process.env);
-  const activeProviderProfileHash = hashProviderProfile(activeProviderProfile);
+  const legacyCatalogEntry = knownProviderCatalog.find(
+    (entry) => entry.provider_id === legacyProviderProfile.provider_id,
+  );
+  const legacyRuntimeProfile: ProviderRuntimeProfile = {
+    id: legacyCatalogEntry?.id ?? "default",
+    display_name:
+      legacyProviderProfile.requested_model_id === "UNCONFIGURED"
+        ? "FixAgent V0"
+        : legacyCatalogEntry?.display_name ??
+          legacyProviderProfile.requested_model_id,
+    provider_label:
+      legacyProviderProfile.provider_id === "UNCONFIGURED"
+        ? "未配置"
+        : legacyCatalogEntry?.provider_label ?? legacyProviderProfile.provider_id,
+    profile: legacyProviderProfile,
+    environment: process.env,
+  };
+  let runtimeProfiles: readonly ProviderRuntimeProfile[] = [];
+  let profilesById = new Map<string, ProviderRuntimeProfile>();
+  let profilesByHash = new Map<string, ProviderRuntimeProfile>();
+  let resolvedDefaultProviderProfileId = "";
+  const installRuntimeProfiles = (
+    nextProfiles: readonly ProviderRuntimeProfile[],
+    nextDefaultProviderProfileId?: string,
+    nextHistoricalProfiles: readonly ProviderRuntimeProfile[] = [],
+  ): void => {
+    const effectiveProfiles =
+      nextProfiles.length > 0 ? nextProfiles : [legacyRuntimeProfile];
+    const nextProfilesById = new Map<string, ProviderRuntimeProfile>();
+    const nextProfilesByHash = new Map<string, ProviderRuntimeProfile>();
+    for (const runtimeProfile of effectiveProfiles) {
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(runtimeProfile.id)) {
+        throw new Error(`PROVIDER_PROFILE_ID_INVALID: ${runtimeProfile.id}`);
+      }
+      if (nextProfilesById.has(runtimeProfile.id)) {
+        throw new Error(`PROVIDER_PROFILE_ID_DUPLICATE: ${runtimeProfile.id}`);
+      }
+      const runtimeProfileHash = hashProviderProfile(runtimeProfile.profile);
+      if (nextProfilesByHash.has(runtimeProfileHash)) {
+        throw new Error(
+          `PROVIDER_PROFILE_RUNTIME_IDENTITY_DUPLICATE: ${runtimeProfile.id}`,
+        );
+      }
+      nextProfilesById.set(runtimeProfile.id, runtimeProfile);
+      nextProfilesByHash.set(runtimeProfileHash, runtimeProfile);
+    }
+    for (const historicalProfile of nextHistoricalProfiles) {
+      if (!/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(historicalProfile.id)) {
+        throw new Error(`PROVIDER_PROFILE_ID_INVALID: ${historicalProfile.id}`);
+      }
+      const historicalHash = hashProviderProfile(historicalProfile.profile);
+      if (!nextProfilesByHash.has(historicalHash)) {
+        nextProfilesByHash.set(historicalHash, historicalProfile);
+      }
+    }
+    const nextDefault =
+      nextDefaultProviderProfileId ?? effectiveProfiles[0]?.id;
+    if (!nextDefault || !nextProfilesById.has(nextDefault)) {
+      throw new Error("DEFAULT_PROVIDER_PROFILE_NOT_FOUND");
+    }
+    runtimeProfiles = effectiveProfiles;
+    profilesById = nextProfilesById;
+    profilesByHash = nextProfilesByHash;
+    resolvedDefaultProviderProfileId = nextDefault;
+  };
+  installRuntimeProfiles(
+    providerProfiles ?? [],
+    defaultProviderProfileId,
+    historicalProviderProfiles,
+  );
   const activeKnowledgeSnapshot = parseKnowledgeSnapshot(knowledgeSnapshot);
+
+  const isConfiguredRuntimeProfile = (
+    runtimeProfile: ProviderRuntimeProfile,
+  ): boolean =>
+    runtimeProfile.profile.credential_type !== "UNCONFIGURED" &&
+    runtimeProfile.profile.requested_model_id !== "UNCONFIGURED";
+
+  const publicRuntimeProfile = (runtimeProfile: ProviderRuntimeProfile) => {
+    const configured = isConfiguredRuntimeProfile(runtimeProfile);
+    return {
+      id: runtimeProfile.id,
+      display_name: runtimeProfile.display_name,
+      provider_label: runtimeProfile.provider_label,
+      provider_id: runtimeProfile.profile.provider_id,
+      configured,
+      anthropic_base_url: runtimeProfile.profile.anthropic_base_url,
+    };
+  };
+  const createPublicModelCatalog = () => {
+    const knownIds = new Set<string>(
+      knownProviderCatalog.map((item) => item.id),
+    );
+    const publicDefaultProfile = publicRuntimeProfile(
+      profilesById.get(resolvedDefaultProviderProfileId)!,
+    );
+    return {
+      configuration_enabled: Boolean(providerRegistryEditor),
+      default_model_id: publicDefaultProfile.configured
+        ? resolvedDefaultProviderProfileId
+        : null,
+      models: [
+        ...runtimeProfiles
+          .filter((runtimeProfile) => !knownIds.has(runtimeProfile.id))
+          .map(publicRuntimeProfile)
+          .filter(
+            (runtimeProfile) =>
+              runtimeProfile.configured || runtimeProfile.id !== "default",
+          ),
+        ...knownProviderCatalog.map((knownProvider) => {
+          const runtimeProfile = profilesById.get(knownProvider.id);
+          return runtimeProfile
+            ? publicRuntimeProfile(runtimeProfile)
+            : {
+                id: knownProvider.id,
+                display_name: knownProvider.display_name,
+                provider_label: knownProvider.provider_label,
+                provider_id: knownProvider.provider_id,
+                configured: false,
+                anthropic_base_url: null,
+              };
+        }),
+      ],
+    };
+  };
 
   const server = createServer(async (request, response) => {
     try {
@@ -254,11 +465,104 @@ export const createFixAgentServer = ({
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/api/cases") {
-        const createBody = z
-          .object({ evaluation_case_id: z.string().min(1).optional() })
+      if (request.method === "GET" && url.pathname === "/api/models") {
+        sendJson(response, 200, createPublicModelCatalog());
+        return;
+      }
+
+      const modelConfigurationRoute = url.pathname.match(
+        /^\/api\/models\/([a-z0-9_-]+)$/i,
+      );
+      if (
+        modelConfigurationRoute &&
+        (request.method === "PUT" || request.method === "DELETE")
+      ) {
+        if (!isTrustedConfigurationRequest(request)) {
+          sendJson(response, 403, {
+            error: "PROVIDER_CONFIGURATION_FORBIDDEN",
+          });
+          return;
+        }
+        if (!providerRegistryEditor) {
+          sendJson(response, 503, {
+            error: "PROVIDER_CONFIGURATION_DISABLED",
+          });
+          return;
+        }
+        const requestedProviderId = modelConfigurationRoute[1] ?? "";
+        const knownProvider = findKnownProvider(requestedProviderId);
+        if (!knownProvider) {
+          sendJson(response, 404, { error: "PROVIDER_PROFILE_NOT_FOUND" });
+          return;
+        }
+
+        if (request.method === "DELETE") {
+          const registry = await providerRegistryEditor.remove(knownProvider.id);
+          installRuntimeProfiles(
+            registry.providerProfiles,
+            registry.defaultProviderProfileId,
+            registry.historicalProviderProfiles,
+          );
+          sendJson(response, 200, createPublicModelCatalog());
+          return;
+        }
+
+        const configurationBody = z
+          .object({
+            api_url: z
+              .url()
+              .refine(isSecureProviderBaseUrl),
+            api_key: z.string().trim().min(1).max(2_000),
+          })
           .strict()
           .parse(await readJson(request));
+        const registry = await providerRegistryEditor.upsert({
+          id: knownProvider.id,
+          anthropic_base_url: configurationBody.api_url,
+          model_id: knownProvider.runtime_model_id,
+          credential_type: knownProvider.credential_type,
+          credential: configurationBody.api_key,
+          expected_claude_code_version: CLAUDE_CODE_VERSION,
+          capabilities: [...knownProvider.capabilities],
+          make_default: false,
+        });
+        installRuntimeProfiles(
+          registry.providerProfiles,
+          registry.defaultProviderProfileId,
+          registry.historicalProviderProfiles,
+        );
+        sendJson(response, 200, createPublicModelCatalog());
+        return;
+      }
+
+      if (request.method === "POST" && url.pathname === "/api/cases") {
+        const createBody = z
+          .object({
+            evaluation_case_id: z.string().min(1).optional(),
+            provider_profile_id: z.string().min(1).optional(),
+          })
+          .strict()
+          .parse(await readJson(request));
+        const selectedRuntimeProfile = profilesById.get(
+          createBody.provider_profile_id ?? resolvedDefaultProviderProfileId,
+        );
+        if (!selectedRuntimeProfile) {
+          sendJson(response, 400, { error: "PROVIDER_PROFILE_NOT_FOUND" });
+          return;
+        }
+        if (
+          providerRegistryEditor &&
+          !isConfiguredRuntimeProfile(selectedRuntimeProfile)
+        ) {
+          sendJson(response, 400, {
+            error: "PROVIDER_PROFILE_NOT_CONFIGURED",
+          });
+          return;
+        }
+        const selectedProviderProfile = selectedRuntimeProfile.profile;
+        const selectedProviderProfileHash = hashProviderProfile(
+          selectedProviderProfile,
+        );
         if (
           activeKnowledgeSnapshot.mode === "EVALUATION" &&
           (activeKnowledgeSnapshot.documents.length > 0 ||
@@ -338,9 +642,9 @@ export const createFixAgentServer = ({
         await createInitialCaseState({
           caseId,
           caseWorkspaceRoot,
-          providerId: activeProviderProfile.provider_id,
-          modelId: activeProviderProfile.requested_model_id,
-          providerProfileHash: activeProviderProfileHash,
+          providerId: selectedProviderProfile.provider_id,
+          modelId: selectedProviderProfile.requested_model_id,
+          providerProfileHash: selectedProviderProfileHash,
           knowledgeSnapshotId: initialKnowledgeSnapshot.snapshot_id,
           knowledgeSnapshotHash: initialKnowledgeSnapshot.content_hash,
         });
@@ -381,8 +685,10 @@ export const createFixAgentServer = ({
           }
           throw error;
         }
-        const providerProfileMatches =
-          caseState.provider_profile_hash === activeProviderProfileHash;
+        const selectedRuntimeProfile = profilesByHash.get(
+          caseState.provider_profile_hash,
+        );
+        const providerProfileMatches = Boolean(selectedRuntimeProfile);
         const caseKnowledgeSnapshot = await loadCaseKnowledgeSnapshot(
           caseWorkspaceRoot,
         );
@@ -618,6 +924,8 @@ export const createFixAgentServer = ({
                   caseId,
                   cwd: caseWorkspaceRoot,
                   userMessage: body.message,
+                  providerEnvironment:
+                    selectedRuntimeProfile?.environment ?? process.env,
                   ...(turnBaseSessionId
                     ? { sessionId: turnBaseSessionId }
                     : {}),
@@ -811,6 +1119,15 @@ export const createFixAgentServer = ({
         error.code === "REQUEST_TOO_LARGE"
       ) {
         sendJson(response, 413, { error: error.code });
+        return;
+      }
+      if (
+        error instanceof FixAgentDomainError &&
+        ["PROVIDER_CREDENTIAL_REQUIRED", "PROVIDER_PROFILE_NOT_FOUND"].includes(
+          error.code,
+        )
+      ) {
+        sendJson(response, 400, { error: error.code });
         return;
       }
       if (error instanceof AgentResponseRejectedError) {

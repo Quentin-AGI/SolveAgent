@@ -51,6 +51,16 @@
         <path d="m12 3-1.7 4.3L6 9l4.3 1.7L12 15l1.7-4.3L18 9l-4.3-1.7Z" />
         <path d="m19 15-.8 2.2L16 18l2.2.8L19 21l.8-2.2L22 18l-2.2-.8Z" />
       </symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24">
+        <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0L6.3 6a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.8v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.1-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.1.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.1.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z" />
+        <circle cx="12" cy="12" r="3" />
+      </symbol>
+      <symbol id="icon-x" viewBox="0 0 24 24">
+        <path d="M18 6 6 18M6 6l12 12" />
+      </symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24">
+        <path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6" />
+      </symbol>
     </svg>
 
     <template id="empty-state-template">
@@ -122,7 +132,12 @@
             <strong>本地验证环境</strong>
             <span id="environment-status">服务状态待验证</span>
           </div>
-          <span id="footer-service-state" class="environment-indicator is-pending" aria-hidden="true" title="服务状态待验证"></span>
+          <div class="sidebar-footer-actions">
+            <button id="model-settings-button" class="icon-button settings-button" type="button" aria-label="模型设置" title="模型设置" disabled>
+              <svg><use href="#icon-settings"></use></svg>
+            </button>
+            <span id="footer-service-state" class="environment-indicator is-pending" aria-hidden="true" title="服务状态待验证"></span>
+          </div>
         </div>
       </aside>
 
@@ -172,10 +187,69 @@
                 <span class="safety-note"><svg><use href="#icon-shield"></use></svg>安全停车后使用</span>
               </div>
               <div class="composer-actions">
-                <span class="model-name">FixAgent V0</span>
-                <button id="submit-button" class="send-button" type="submit" aria-label="发送" title="发送">
+                <div id="model-picker" class="model-picker">
+                  <button
+                    id="model-picker-button"
+                    class="model-picker-button"
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    title="选择模型"
+                  >
+                    <span id="selected-model-name">加载模型…</span>
+                    <svg><use href="#icon-chevron-down"></use></svg>
+                  </button>
+                  <div id="model-menu" class="model-menu" role="listbox" aria-label="选择模型" hidden>
+                    <div class="model-menu-heading">选择模型</div>
+                    <div id="model-options" class="model-options"></div>
+                  </div>
+                </div>
+                <button id="submit-button" class="send-button" type="submit" aria-label="发送" title="发送" disabled>
                   <svg><use href="#icon-arrow-up"></use></svg>
                 </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <div id="model-settings-overlay" class="settings-overlay" hidden>
+      <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="model-settings-title">
+        <header class="settings-header">
+          <h2 id="model-settings-title">模型设置</h2>
+          <button id="model-settings-close" class="icon-button" type="button" aria-label="关闭模型设置" title="关闭">
+            <svg><use href="#icon-x"></use></svg>
+          </button>
+        </header>
+        <div class="settings-body">
+          <nav id="settings-provider-list" class="settings-provider-list" aria-label="模型供应商"></nav>
+          <form id="model-settings-form" class="settings-form">
+            <div class="settings-form-heading">
+              <div>
+                <h3 id="settings-provider-name">通义千问</h3>
+                <span id="settings-provider-label">阿里云百炼</span>
+              </div>
+              <span id="settings-provider-status" class="settings-provider-status">待配置</span>
+            </div>
+
+            <label class="settings-field">
+              <span>API 地址</span>
+              <input id="settings-base-url" name="anthropic_base_url" type="url" inputmode="url" autocomplete="off" required />
+            </label>
+            <label class="settings-field">
+              <span>API Key</span>
+              <input id="settings-credential" name="api_key" type="password" autocomplete="new-password" />
+            </label>
+
+            <div class="settings-form-footer">
+              <span id="settings-save-status" role="status" aria-live="polite"></span>
+              <div class="settings-form-actions">
+                <button id="settings-delete" class="settings-delete-button" type="button">
+                  <svg><use href="#icon-trash"></use></svg>
+                  移除配置
+                </button>
+                <button id="settings-save" class="settings-save-button" type="submit">保存</button>
               </div>
             </div>
           </form>

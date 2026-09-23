@@ -76,7 +76,10 @@ export const createCaseWorkerRuntime = (): AgentRuntime => ({
     const worker = fork(workerEntry, [], {
       cwd: request.cwd,
       env: {
-        ...buildCaseWorkerEnvironment(process.env, request.cwd),
+        ...buildCaseWorkerEnvironment(
+          request.providerEnvironment ?? process.env,
+          request.cwd,
+        ),
         FIXAGENT_CASE_ID: request.caseId,
       },
       execArgv: process.execArgv,

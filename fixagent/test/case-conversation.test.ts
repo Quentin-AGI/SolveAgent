@@ -17,8 +17,10 @@ import {
   pruneExpiredTraces,
   type AgentRunRequest,
   type AgentRuntime,
+  type ProviderRuntimeProfile,
 } from "../src/app.js";
 import { commitCaseEvent, readCaseState } from "../src/case-store.js";
+import { createProviderRegistryEditor } from "../src/provider-registry.js";
 import {
   createKnowledgeSnapshot,
   VEHICLE_SAFELY_PARKED_EVIDENCE_REF,
@@ -46,6 +48,31 @@ const testProviderProfile = (
     FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION: claudeCodeVersion,
     FIXAGENT_EXPECTED_OBSERVED_MODEL_ID: modelId,
   });
+
+const testRuntimeProfile = (
+  id: string,
+  displayName: string,
+  providerId: string,
+  modelId: string,
+): ProviderRuntimeProfile => ({
+  id,
+  display_name: displayName,
+  provider_label: providerId,
+  profile: testProviderProfile(providerId, modelId, "test-version"),
+  environment: {
+    FIXAGENT_PROVIDER_ID: providerId,
+    ANTHROPIC_BASE_URL: `https://${providerId}.example.test`,
+    ANTHROPIC_AUTH_TOKEN: `${id}-secret`,
+    FIXAGENT_MODEL: modelId,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: `${modelId}-opus`,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: `${modelId}-sonnet`,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: `${modelId}-haiku`,
+    ANTHROPIC_DEFAULT_FABLE_MODEL: `${modelId}-fable`,
+    FIXAGENT_PROVIDER_CAPABILITIES: "tools,vision",
+    FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION: "test-version",
+    FIXAGENT_EXPECTED_OBSERVED_MODEL_ID: modelId,
+  },
+});
 
 const testKnowledgeSnapshotInput = (): KnowledgeSnapshotInput => {
   const applicability = {
@@ -1072,7 +1099,14 @@ test("user sees the non-scored Case conversation entry point", async () => {
   temporaryDirectories.push(workspaceRoot);
 
   const runtime: AgentRuntime = { async run() {} };
-  const app = createFixAgentServer({ runtime, workspaceRoot });
+  const app = createFixAgentServer({
+    runtime,
+    workspaceRoot,
+    providerRegistryEditor: createProviderRegistryEditor(
+      join(workspaceRoot, "private", "providers.json"),
+      { PATH: process.env.PATH },
+    ),
+  });
   await app.listen();
 
   try {
@@ -1082,9 +1116,280 @@ test("user sees the non-scored Case conversation entry point", async () => {
     assert.equal(page.status, 200);
     assert.match(html, /NON-SCORED · DATA_NO_GO/);
     assert.match(html, /<form[^>]+id="case-form"/);
+    assert.match(html, /id="model-picker-button"/);
+    assert.match(html, /id="model-settings-button"/);
+    assert.doesNotMatch(html, /id="settings-model-id"/);
+
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    assert.equal(created.status, 400);
+    assert.deepEqual(await created.json(), {
+      error: "PROVIDER_PROFILE_NOT_CONFIGURED",
+    });
   } finally {
     await app.close();
   }
+});
+
+test("user selects a sanitized model profile that stays frozen to the Case", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  let runtimeEnvironment: NodeJS.ProcessEnv | undefined;
+  const providerProfiles = [
+    testRuntimeProfile("qwen", "通义千问", "qwen", "qwen-model"),
+    testRuntimeProfile("kimi", "Kimi", "kimi", "kimi-model"),
+  ];
+  const app = createFixAgentServer({
+    workspaceRoot,
+    providerProfiles,
+    defaultProviderProfileId: "kimi",
+    runtime: {
+      async run(request) {
+        runtimeEnvironment = request.providerEnvironment;
+        await request.publish({
+          message_markdown: "请补充故障画面。",
+          claim_refs: [],
+          action_card_refs: [],
+          response_type: "EVIDENCE_REQUEST",
+        });
+      },
+    },
+  });
+  await app.listen();
+
+  try {
+    const catalogResponse = await fetch(new URL("/api/models", app.url));
+    const catalogText = await catalogResponse.text();
+    assert.equal(catalogResponse.status, 200);
+    assert.equal(catalogText.includes("qwen-secret"), false);
+    assert.equal(catalogText.includes("kimi-secret"), false);
+    assert.deepEqual(JSON.parse(catalogText), {
+      configuration_enabled: false,
+      default_model_id: "kimi",
+      models: [
+        {
+          id: "qwen",
+          display_name: "通义千问",
+          provider_label: "qwen",
+          provider_id: "qwen",
+          configured: true,
+          anthropic_base_url: "https://qwen.example.test",
+        },
+        {
+          id: "kimi",
+          display_name: "Kimi",
+          provider_label: "kimi",
+          provider_id: "kimi",
+          configured: true,
+          anthropic_base_url: "https://kimi.example.test",
+        },
+        {
+          id: "zhipu",
+          display_name: "智谱 GLM",
+          provider_label: "智谱开放平台",
+          provider_id: "zhipu",
+          configured: false,
+          anthropic_base_url: null,
+        },
+        {
+          id: "deepseek",
+          display_name: "DeepSeek",
+          provider_label: "DeepSeek",
+          provider_id: "deepseek",
+          configured: false,
+          anthropic_base_url: null,
+        },
+      ],
+    });
+
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider_profile_id: "qwen" }),
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const state = await readCaseState(join(workspaceRoot, caseId));
+    assert.equal(state.provider_id, "qwen");
+    assert.equal(state.model_id, "qwen-model");
+
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "屏幕有黑边" }),
+      },
+    );
+    assert.equal(replied.status, 200);
+    assert.equal(runtimeEnvironment?.ANTHROPIC_AUTH_TOKEN, "qwen-secret");
+
+    const unknown = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider_profile_id: "unknown" }),
+    });
+    assert.equal(unknown.status, 400);
+    assert.deepEqual(await unknown.json(), {
+      error: "PROVIDER_PROFILE_NOT_FOUND",
+    });
+  } finally {
+    await app.close();
+  }
+});
+
+test("model settings persist privately and become selectable without a restart", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const registryFile = join(workspaceRoot, "private", "providers.json");
+  let runtimeEnvironment: NodeJS.ProcessEnv | undefined;
+  const app = createFixAgentServer({
+    workspaceRoot,
+    providerRegistryEditor: createProviderRegistryEditor(registryFile, {
+      PATH: process.env.PATH,
+    }),
+    runtime: {
+      async run(request) {
+        runtimeEnvironment = request.providerEnvironment;
+        await request.publish({
+          message_markdown: "请补充故障画面。",
+          claim_refs: [],
+          action_card_refs: [],
+          response_type: "EVIDENCE_REQUEST",
+        });
+      },
+    },
+  });
+  await app.listen();
+
+  try {
+    const crossOrigin = await fetch(new URL("/api/models/qwen", app.url), {
+      method: "PUT",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://untrusted.example",
+      },
+      body: JSON.stringify({
+        api_url: "https://qwen.example.test/anthropic",
+        api_key: "browser-secret",
+      }),
+    });
+    assert.equal(crossOrigin.status, 403);
+
+    for (const apiUrl of [
+      "http://qwen.example.test/anthropic",
+      "https://user:password@qwen.example.test/anthropic",
+      "https://qwen.example.test/anthropic?api_key=secret",
+      "https://qwen.example.test/anthropic#secret",
+    ]) {
+      const insecure = await fetch(new URL("/api/models/qwen", app.url), {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ api_url: apiUrl, api_key: "browser-secret" }),
+      });
+      assert.equal(insecure.status, 400);
+    }
+
+    const saved = await fetch(new URL("/api/models/qwen", app.url), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        api_url: "https://qwen.example.test/anthropic",
+        api_key: "browser-secret",
+      }),
+    });
+    const savedText = await saved.text();
+    assert.equal(saved.status, 200);
+    assert.equal(savedText.includes("browser-secret"), false);
+    const savedCatalog = JSON.parse(savedText) as {
+      default_model_id: string;
+      models: Array<{ id: string; configured: boolean }>;
+    };
+    assert.equal(savedCatalog.default_model_id, "qwen");
+    assert.equal(
+      savedCatalog.models.find((model) => model.id === "qwen")?.configured,
+      true,
+    );
+
+    const missingKey = await fetch(new URL("/api/models/qwen", app.url), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        api_url: "https://qwen.example.test/anthropic-v2",
+      }),
+    });
+    assert.equal(missingKey.status, 400);
+
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider_profile_id: "qwen" }),
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const state = await readCaseState(join(workspaceRoot, caseId));
+    assert.equal(state.model_id, "qwen3.7-max");
+
+    const updated = await fetch(new URL("/api/models/qwen", app.url), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        api_url: "https://qwen-v2.example.test/anthropic",
+        api_key: "rotated-secret",
+      }),
+    });
+    assert.equal(updated.status, 200);
+
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "屏幕有黑边" }),
+      },
+    );
+    assert.equal(replied.status, 200);
+    assert.equal(runtimeEnvironment?.ANTHROPIC_AUTH_TOKEN, "rotated-secret");
+    assert.equal(
+      runtimeEnvironment?.ANTHROPIC_BASE_URL,
+      "https://qwen.example.test/anthropic",
+    );
+
+    const removed = await fetch(new URL("/api/models/qwen", app.url), {
+      method: "DELETE",
+    });
+    const removedCatalog = (await removed.json()) as {
+      models: Array<{ id: string; configured: boolean }>;
+    };
+    assert.equal(removed.status, 200);
+    assert.equal(
+      removedCatalog.models.find((model) => model.id === "qwen")?.configured,
+      false,
+    );
+  } finally {
+    await app.close();
+  }
+});
+
+test("server rejects model profiles with an ambiguous frozen runtime identity", () => {
+  assert.throws(
+    () =>
+      createFixAgentServer({
+        workspaceRoot: join(tmpdir(), "fixagent-unused-workspace"),
+        runtime: { async run() {} },
+        providerProfiles: [
+          testRuntimeProfile("qwen", "通义千问", "qwen", "qwen-model"),
+          testRuntimeProfile(
+            "qwen-backup",
+            "通义千问备用",
+            "qwen",
+            "qwen-model",
+          ),
+        ],
+      }),
+    /PROVIDER_PROFILE_RUNTIME_IDENTITY_DUPLICATE/,
+  );
 });
 
 test("Case starts with a read-only project Skill, Scratch workspace, and private Trace", async () => {

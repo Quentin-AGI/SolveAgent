@@ -6,6 +6,19 @@ import {
   hashProviderProfile,
 } from "../src/provider-profile.js";
 
+const completeProviderEnvironment: NodeJS.ProcessEnv = {
+  FIXAGENT_PROVIDER_ID: "qwen",
+  ANTHROPIC_BASE_URL: "https://provider.example/anthropic",
+  ANTHROPIC_AUTH_TOKEN: "secret",
+  FIXAGENT_MODEL: "requested-model",
+  ANTHROPIC_DEFAULT_OPUS_MODEL: "opus-tier",
+  ANTHROPIC_DEFAULT_SONNET_MODEL: "sonnet-tier",
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: "haiku-tier",
+  ANTHROPIC_DEFAULT_FABLE_MODEL: "fable-tier",
+  FIXAGENT_PROVIDER_CAPABILITIES: "vision,tools",
+  FIXAGENT_EXPECTED_CLAUDE_CODE_VERSION: "2.1.0",
+};
+
 test("Frozen Provider Profile hashes all non-secret runtime identity inputs", () => {
   const baseEnvironment: NodeJS.ProcessEnv = {
     FIXAGENT_PROVIDER_ID: "qwen",
@@ -77,4 +90,22 @@ test("blank provider and model identifiers fail closed", () => {
       }),
     /PROVIDER_PROFILE_INCOMPLETE.*provider_id/,
   );
+});
+
+test("provider base URLs reject insecure or credential-bearing variants", () => {
+  for (const baseUrl of [
+    "http://provider.example/anthropic",
+    "https://user:password@provider.example/anthropic",
+    "https://provider.example/anthropic?api_key=secret",
+    "https://provider.example/anthropic#secret",
+  ]) {
+    assert.throws(
+      () =>
+        buildFrozenProviderProfile({
+          ...completeProviderEnvironment,
+          ANTHROPIC_BASE_URL: baseUrl,
+        }),
+      /PROVIDER_BASE_URL_INVALID/,
+    );
+  }
 });
