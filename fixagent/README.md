@@ -17,7 +17,7 @@ The current slice provides:
 - a deterministic pre-Agent text Safety Gate that emits only the frozen fallback sentence and atomically creates a clearly labelled simulated `SAFETY_HANDOFF`.
 - seven-day raw Trace expiry with an operational alert if deletion fails; report-freeze deletion will be added with the reporting subsystem.
 
-The built-in snapshot is deliberately empty, so the default runtime can still publish only non-operational evidence requests. A reviewed, hash-valid snapshot must be supplied through `FIXAGENT_KNOWLEDGE_SNAPSHOT_FILE` before knowledge-backed information can be published. Action Cards additionally remain unavailable until all Case evidence prerequisites are present, including the universal safely-parked evidence reference. No network source is promoted to `EVAL_APPROVED` automatically.
+The built-in snapshot is deliberately empty, so the default runtime can still publish only non-operational evidence requests. A reviewed, hash-valid snapshot must be supplied through `FIXAGENT_KNOWLEDGE_SNAPSHOT_FILE` before knowledge-backed information can be published. Its sources carry separate publication and retrieval timestamps, and every entry records the approving person, time, and authority. Action Cards additionally remain unavailable until all Case evidence prerequisites are present, including the universal safely-parked evidence reference; Level 2 cards require an exact product/version `ACTION_SOP`, and applicable prohibitions veto matching cards. No network source is promoted to `EVAL_APPROVED` automatically.
 
 It does not yet implement the approved knowledge corpus, image ingestion, vision and in-session Safety signals, Case State write tools, action-result recording, ordinary Handoff, Evidence Broker, or provider certification. It is an architecture-validation slice and must not be used for live device troubleshooting.
 
@@ -37,7 +37,7 @@ pnpm build
 
 Copy `.env.example` into your secret-management workflow and supply an Anthropic-compatible provider profile. Do not commit the resulting credentials.
 
-An approved snapshot file is optional. When omitted, each new Case is pinned to `EMPTY_EVAL_V0`. Existing Cases always resume from their own read-only snapshot copy and never switch silently when the configured snapshot changes.
+An approved snapshot file is optional. When omitted, each new Case is pinned by both ID and content hash to `EMPTY_EVAL_V0`. Existing Cases always resume from their own read-only snapshot copy and never switch silently when the configured snapshot changes. A non-empty Evaluation snapshot requires `cutoff_at` in the Case creation request; the server materializes a Case-specific snapshot using source publication time and rejects a cutoff later than the configured corpus.
 
 ```bash
 pnpm dev

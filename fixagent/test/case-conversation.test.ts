@@ -69,6 +69,7 @@ const testKnowledgeSnapshot = () => {
         knowledge_id: "DOC-DISPLAY-001",
         version: "1",
         kind: "PRODUCT_DOC",
+        document_type: "GENERAL",
         title: "Test display procedure",
         text: "Fixture-only approved display procedure.",
         tags: ["display"],
@@ -77,9 +78,13 @@ const testKnowledgeSnapshot = () => {
           uri: "https://example.test/display",
           title: "Test source",
           retrieved_at: "2026-09-22T12:00:00.000Z",
+          published_at: "2026-09-20T12:00:00.000Z",
           source_content_hash: "a".repeat(64),
         },
         approval_status: "EVAL_APPROVED",
+        approved_by: "test-data-owner",
+        approved_at: "2026-09-22T18:00:00.000Z",
+        approval_authority: "EVALUATION_DATA_OWNER",
       },
     ],
     action_cards: [
@@ -95,6 +100,9 @@ const testKnowledgeSnapshot = () => {
         rollback: ["Stop the fixture-only test."],
         source_ref: { knowledge_id: "DOC-DISPLAY-001", version: "1" },
         approval_status: "EVAL_APPROVED",
+        approved_by: "test-data-owner",
+        approved_at: "2026-09-22T18:00:00.000Z",
+        approval_authority: "EVALUATION_DATA_OWNER",
       },
     ],
     prohibited_actions: [],
@@ -527,8 +535,16 @@ test("host publishes an action only when its frozen Knowledge and Action Card re
   try {
     const created = await fetch(new URL("/api/cases", app.url), {
       method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cutoff_at: "2026-09-21T00:00:00.000Z" }),
     });
-    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const {
+      case_id: caseId,
+      knowledge_snapshot_id: caseKnowledgeSnapshotId,
+    } = (await created.json()) as {
+      case_id: string;
+      knowledge_snapshot_id: string;
+    };
     const caseWorkspaceRoot = join(workspaceRoot, caseId);
     const initial = await readCaseState(caseWorkspaceRoot);
     await commitCaseEvent({
@@ -560,8 +576,71 @@ test("host publishes an action only when its frozen Knowledge and Action Card re
     ]);
     const state = JSON.parse(
       await readFile(join(workspaceRoot, caseId, "state.json"), "utf8"),
-    ) as { knowledge_snapshot_id: string };
-    assert.equal(state.knowledge_snapshot_id, knowledgeSnapshot.snapshot_id);
+    ) as {
+      knowledge_snapshot_id: string;
+      knowledge_snapshot_hash: string;
+    };
+    const frozenSnapshot = JSON.parse(
+      await readFile(
+        join(workspaceRoot, caseId, ".fixagent", "knowledge-snapshot.json"),
+        "utf8",
+      ),
+    ) as { content_hash: string };
+    assert.equal(state.knowledge_snapshot_id, caseKnowledgeSnapshotId);
+    assert.notEqual(state.knowledge_snapshot_id, knowledgeSnapshot.snapshot_id);
+    assert.equal(state.knowledge_snapshot_hash, frozenSnapshot.content_hash);
+  } finally {
+    await app.close();
+  }
+});
+
+test("evaluation Cases require and independently materialize their own cutoff", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const app = createFixAgentServer({
+    runtime: { async run() {} },
+    workspaceRoot,
+    knowledgeSnapshot: testKnowledgeSnapshot(),
+  });
+  await app.listen();
+
+  try {
+    const missingCutoff = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    assert.equal(missingCutoff.status, 400);
+    assert.deepEqual(await missingCutoff.json(), {
+      error: "CASE_CUTOFF_REQUIRED",
+    });
+
+    const createAt = async (cutoffAt: string) => {
+      const response = await fetch(new URL("/api/cases", app.url), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cutoff_at: cutoffAt }),
+      });
+      assert.equal(response.status, 201);
+      return (await response.json()) as {
+        case_id: string;
+        knowledge_snapshot_id: string;
+      };
+    };
+    const early = await createAt("2026-09-19T23:59:59.000Z");
+    const later = await createAt("2026-09-21T00:00:00.000Z");
+    const readFrozen = async (caseId: string) =>
+      JSON.parse(
+        await readFile(
+          join(workspaceRoot, caseId, ".fixagent", "knowledge-snapshot.json"),
+          "utf8",
+        ),
+      ) as { documents: unknown[]; content_hash: string };
+    const earlySnapshot = await readFrozen(early.case_id);
+    const laterSnapshot = await readFrozen(later.case_id);
+
+    assert.equal(earlySnapshot.documents.length, 0);
+    assert.equal(laterSnapshot.documents.length, 1);
+    assert.notEqual(early.knowledge_snapshot_id, later.knowledge_snapshot_id);
+    assert.notEqual(earlySnapshot.content_hash, laterSnapshot.content_hash);
   } finally {
     await app.close();
   }

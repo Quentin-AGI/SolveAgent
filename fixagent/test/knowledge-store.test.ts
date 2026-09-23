@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   createKnowledgeSnapshot,
   getActionPolicy,
+  materializeCaseKnowledgeSnapshot,
   parseKnowledgeSnapshot,
   searchKnowledge,
   validatePublishedCaseResponse,
@@ -16,6 +17,12 @@ const applicability = {
   configuration_ids: ["RPI4_7IN"],
   software_versions: ["20250108"],
   regions: ["GLOBAL"],
+};
+const evaluationApproval = {
+  approval_status: "EVAL_APPROVED" as const,
+  approved_by: "test-data-owner",
+  approved_at: "2026-09-22T18:00:00.000Z",
+  approval_authority: "EVALUATION_DATA_OWNER" as const,
 };
 
 const fixtureInput = (): KnowledgeSnapshotInput => ({
@@ -35,6 +42,7 @@ const fixtureInput = (): KnowledgeSnapshotInput => ({
       knowledge_id: "DOC-DISPLAY-001",
       version: "1",
       kind: "PRODUCT_DOC",
+      document_type: "GENERAL",
       title: "Display settings",
       text: "Approved display configuration guidance.",
       tags: ["display", "configuration"],
@@ -42,15 +50,17 @@ const fixtureInput = (): KnowledgeSnapshotInput => ({
       source: {
         uri: "https://example.test/docs/display",
         title: "Display documentation",
-        retrieved_at: "2026-09-22T12:00:00.000Z",
+        retrieved_at: "2026-09-22T20:00:00.000Z",
+        published_at: "2026-09-20T12:00:00.000Z",
         source_content_hash: sha,
       },
-      approval_status: "EVAL_APPROVED",
+      ...evaluationApproval,
     },
     {
       knowledge_id: "CASE-279",
       version: "1",
       kind: "HISTORICAL_CASE",
+      document_type: "CASE_REPORT",
       title: "Display border case",
       text: "A historical display border report.",
       tags: ["display", "border"],
@@ -59,9 +69,10 @@ const fixtureInput = (): KnowledgeSnapshotInput => ({
         uri: "https://example.test/cases/279",
         title: "Historical case 279",
         retrieved_at: "2026-09-22T12:00:00.000Z",
+        published_at: "2026-09-21T12:00:00.000Z",
         source_content_hash: sha,
       },
-      approval_status: "EVAL_APPROVED",
+      ...evaluationApproval,
     },
   ],
   action_cards: [
@@ -76,16 +87,17 @@ const fixtureInput = (): KnowledgeSnapshotInput => ({
       verification: ["Confirm the original display symptom."],
       rollback: ["Stop and request expert help if restart fails."],
       source_ref: { knowledge_id: "DOC-DISPLAY-001", version: "1" },
-      approval_status: "EVAL_APPROVED",
+      ...evaluationApproval,
     },
   ],
   prohibited_actions: [
     {
       policy_id: "NO-VEHICLE-WIRING",
       description: "Do not alter vehicle wiring.",
+      blocked_action_ids: ["ACTION-VEHICLE-WIRING"],
       applicability,
       source_ref: { knowledge_id: "DOC-DISPLAY-001", version: "1" },
-      approval_status: "EVAL_APPROVED",
+      ...evaluationApproval,
     },
   ],
 });
@@ -118,10 +130,10 @@ test("Knowledge Snapshot enforces approval mode and source cutoff", () => {
   const afterCutoff = fixtureInput();
   const lateDocument = afterCutoff.documents[0];
   assert.ok(lateDocument);
-  lateDocument.source.retrieved_at = "2026-09-23T01:00:00.000Z";
+  lateDocument.source.published_at = "2026-09-23T01:00:00.000Z";
   assert.throws(
     () => createKnowledgeSnapshot(afterCutoff),
-    /KNOWLEDGE_SOURCE_AFTER_CUTOFF/,
+    /KNOWLEDGE_SOURCE_PUBLISHED_AFTER_CUTOFF/,
   );
 
   const unsafeAction = fixtureInput();
@@ -129,6 +141,29 @@ test("Knowledge Snapshot enforces approval mode and source cutoff", () => {
   assert.ok(action);
   action.prerequisite_evidence_refs = [];
   assert.throws(() => createKnowledgeSnapshot(unsafeAction), /safely parked/);
+
+  const customer = fixtureInput();
+  customer.mode = "CUSTOMER";
+  for (const entry of [
+    ...customer.documents,
+    ...customer.action_cards,
+    ...customer.prohibited_actions,
+  ]) {
+    entry.approval_status = "PRODUCTION_APPROVED";
+  }
+  assert.throws(
+    () => createKnowledgeSnapshot(customer),
+    /KNOWLEDGE_APPROVAL_AUTHORITY_MISMATCH/,
+  );
+  for (const entry of [
+    ...customer.documents,
+    ...customer.action_cards,
+    ...customer.prohibited_actions,
+  ]) {
+    entry.approval_authority = "DOMAIN_OWNER";
+    entry.approved_by = "named-domain-owner";
+  }
+  assert.doesNotThrow(() => createKnowledgeSnapshot(customer));
 });
 
 test("Knowledge search separates product documents from historical cases", () => {
@@ -158,6 +193,55 @@ test("Action policy requires current Case evidence and keeps prohibitions visibl
     VEHICLE_SAFELY_PARKED_EVIDENCE_REF,
   ]);
   assert.equal(available.action_cards[0]?.action_id, "ACTION-DISPLAY-RESTART");
+
+  const vetoInput = fixtureInput();
+  const prohibition = vetoInput.prohibited_actions[0];
+  assert.ok(prohibition);
+  prohibition.blocked_action_ids = ["ACTION-DISPLAY-RESTART"];
+  const vetoed = getActionPolicy(createKnowledgeSnapshot(vetoInput), [
+    VEHICLE_SAFELY_PARKED_EVIDENCE_REF,
+  ]);
+  assert.equal(vetoed.action_cards.length, 0);
+});
+
+test("Case-specific cutoff filters knowledge by publication time, not retrieval time", () => {
+  const snapshot = createKnowledgeSnapshot(fixtureInput());
+  const earlier = materializeCaseKnowledgeSnapshot(
+    snapshot,
+    "2026-09-20T23:59:59.000Z",
+  );
+
+  assert.deepEqual(
+    earlier.documents.map((document) => document.knowledge_id),
+    ["DOC-DISPLAY-001"],
+  );
+  assert.equal(earlier.action_cards.length, 1);
+  assert.notEqual(earlier.snapshot_id, snapshot.snapshot_id);
+  assert.notEqual(earlier.content_hash, snapshot.content_hash);
+  assert.throws(
+    () =>
+      materializeCaseKnowledgeSnapshot(
+        snapshot,
+        "2026-09-23T00:00:00.000Z",
+      ),
+    /CASE_KNOWLEDGE_CUTOFF_EXCEEDS_CORPUS/,
+  );
+});
+
+test("Level 2 actions require an exact product and version approved SOP", () => {
+  const invalid = fixtureInput();
+  const action = invalid.action_cards[0];
+  assert.ok(action);
+  action.risk_level = "LEVEL_2";
+  assert.throws(
+    () => createKnowledgeSnapshot(invalid),
+    /LEVEL_2_ACTION_REQUIRES_EXACT_APPROVED_SOP/,
+  );
+
+  const sop = invalid.documents[0];
+  assert.ok(sop);
+  sop.document_type = "ACTION_SOP";
+  assert.doesNotThrow(() => createKnowledgeSnapshot(invalid));
 });
 
 test("publication accepts exact applicable references and rejects stale or inapplicable ones", () => {
@@ -176,6 +260,7 @@ test("publication accepts exact applicable references and rejects stale or inapp
       candidate,
       snapshot,
       caseKnowledgeSnapshotId: snapshot.snapshot_id,
+      caseKnowledgeSnapshotHash: snapshot.content_hash,
       evidenceRefs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
     }),
     candidate,
@@ -186,6 +271,7 @@ test("publication accepts exact applicable references and rejects stale or inapp
         candidate,
         snapshot,
         caseKnowledgeSnapshotId: snapshot.snapshot_id,
+        caseKnowledgeSnapshotHash: snapshot.content_hash,
         evidenceRefs: [],
       }),
     /ACTION_CARD_NOT_APPROVED_OR_APPLICABLE/,
@@ -199,6 +285,7 @@ test("publication accepts exact applicable references and rejects stale or inapp
         },
         snapshot,
         caseKnowledgeSnapshotId: snapshot.snapshot_id,
+        caseKnowledgeSnapshotHash: snapshot.content_hash,
         evidenceRefs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
       }),
     /KNOWLEDGE_REFERENCE_NOT_APPROVED_OR_APPLICABLE/,
@@ -209,8 +296,20 @@ test("publication accepts exact applicable references and rejects stale or inapp
         candidate,
         snapshot,
         caseKnowledgeSnapshotId: "CHANGED_SNAPSHOT",
+        caseKnowledgeSnapshotHash: snapshot.content_hash,
         evidenceRefs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
       }),
     /FROZEN_KNOWLEDGE_SNAPSHOT_MISMATCH/,
+  );
+  assert.throws(
+    () =>
+      validatePublishedCaseResponse({
+        candidate,
+        snapshot,
+        caseKnowledgeSnapshotId: snapshot.snapshot_id,
+        caseKnowledgeSnapshotHash: "f".repeat(64),
+        evidenceRefs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
+      }),
+    /FROZEN_KNOWLEDGE_SNAPSHOT_HASH_MISMATCH/,
   );
 });

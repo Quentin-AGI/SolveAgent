@@ -12,6 +12,7 @@ import type {
   AgentRuntime,
 } from "./app.js";
 import { readCaseState } from "./case-store.js";
+import { domainErrorCode } from "./domain-error.js";
 import {
   getActionPolicy,
   loadCaseKnowledgeSnapshot,
@@ -126,11 +127,6 @@ const toolResult = (value: Record<string, unknown>) => ({
   structuredContent: value,
 });
 
-const publicationErrorCode = (error: unknown): string =>
-  error instanceof Error
-    ? (error.message.split(":", 1)[0] ?? "PUBLICATION_REJECTED")
-    : "PUBLICATION_REJECTED";
-
 const createFixAgentMcpServer = (
   request: AgentRunRequest,
   snapshot: KnowledgeSnapshot,
@@ -188,6 +184,7 @@ const createFixAgentMcpServer = (
         case_id: state.case_id,
         state_revision: state.state_revision,
         knowledge_snapshot_id: state.knowledge_snapshot_id,
+        knowledge_snapshot_hash: state.knowledge_snapshot_hash,
         route: state.route,
         safety_status: state.safety_status,
         facts: state.facts,
@@ -225,6 +222,7 @@ const createFixAgentMcpServer = (
           candidate: args,
           snapshot,
           caseKnowledgeSnapshotId: state.knowledge_snapshot_id,
+          caseKnowledgeSnapshotHash: state.knowledge_snapshot_hash,
           evidenceRefs: state.evidence_refs,
         });
         await request.publish(response);
@@ -233,7 +231,7 @@ const createFixAgentMcpServer = (
         return {
           ...toolResult({
             status: "REJECTED",
-            code: publicationErrorCode(error),
+            code: domainErrorCode(error, "PUBLICATION_REJECTED"),
           }),
           isError: true,
         };

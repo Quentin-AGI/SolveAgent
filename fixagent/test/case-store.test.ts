@@ -49,6 +49,7 @@ test("Case event writes are revision-checked, idempotent, and rebuildable", asyn
     modelId: "qwen-model",
     providerProfileHash: hashCaseRequest({ provider: "qwen" }),
     knowledgeSnapshotId: "EMPTY_EVAL_V0",
+    knowledgeSnapshotHash: "b".repeat(64),
   });
   assert.equal(initial.state_revision, 0);
   assert.match(initial.content_hash, /^[a-f0-9]{64}$/);
@@ -89,6 +90,21 @@ test("Case event writes are revision-checked, idempotent, and rebuildable", asyn
       await readFile(join(caseWorkspaceRoot, "state.json"), "utf8"),
     ).state_revision,
     1,
+  );
+
+  const tamperedState = JSON.parse(
+    await readFile(join(caseWorkspaceRoot, "state.json"), "utf8"),
+  ) as Record<string, unknown>;
+  tamperedState.knowledge_snapshot_hash = "f".repeat(64);
+  delete tamperedState.content_hash;
+  tamperedState.content_hash = hashCaseRequest(tamperedState);
+  await writeFile(
+    join(caseWorkspaceRoot, "state.json"),
+    `${JSON.stringify(tamperedState, null, 2)}\n`,
+  );
+  assert.equal(
+    (await readCaseState(caseWorkspaceRoot)).knowledge_snapshot_hash,
+    "b".repeat(64),
   );
 
   await assert.rejects(
@@ -147,6 +163,7 @@ test("a stale Worker cannot write after its Lease fencing token changes", async 
     modelId: "qwen-model",
     providerProfileHash: hashCaseRequest({ provider: "qwen" }),
     knowledgeSnapshotId: "EMPTY_EVAL_V0",
+    knowledgeSnapshotHash: "b".repeat(64),
   });
   const lease = await acquireCaseWorkerLease(caseWorkspaceRoot, caseId);
   const acquired = await commitCaseEvent({

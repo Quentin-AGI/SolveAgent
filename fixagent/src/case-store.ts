@@ -26,6 +26,7 @@ const stateSchema = z.object({
   model_id: z.string().min(1),
   provider_profile_hash: z.string().regex(/^[a-f0-9]{64}$/),
   knowledge_snapshot_id: z.string().min(1),
+  knowledge_snapshot_hash: z.string().regex(/^[a-f0-9]{64}$/),
   worker_lease_id: z.string().nullable(),
   route: z.enum([
     "EVIDENCE_COLLECTION",
@@ -166,7 +167,12 @@ const readCaseStateOnce = async (
     if (state.state_revision > latestEvent.revision) {
       throw new Error("CASE_STATE_AHEAD_OF_EVENT_LOG");
     }
-    if (state.state_revision === latestEvent.revision) return state;
+    if (state.state_revision === latestEvent.revision) {
+      if (state.content_hash !== latestEvent.state_after.content_hash) {
+        throw new Error("CASE_STATE_EVENT_MISMATCH");
+      }
+      return state;
+    }
     await writeJsonAtomic(
       join(caseWorkspaceRoot, "state.json"),
       latestEvent.state_after,
@@ -179,7 +185,10 @@ const readCaseStateOnce = async (
         error.code === "ENOENT") ||
       error instanceof SyntaxError ||
       error instanceof z.ZodError ||
-      (error instanceof Error && error.message === "CASE_STORE_HASH_MISMATCH");
+      (error instanceof Error &&
+        ["CASE_STORE_HASH_MISMATCH", "CASE_STATE_EVENT_MISMATCH"].includes(
+          error.message,
+        ));
     if (projectionCanBeRebuilt) {
       await writeJsonAtomic(
         join(caseWorkspaceRoot, "state.json"),
@@ -203,6 +212,7 @@ interface CreateInitialCaseStateInput {
   modelId: string;
   providerProfileHash: string;
   knowledgeSnapshotId: string;
+  knowledgeSnapshotHash: string;
 }
 
 const createInitialCaseStateOnce = async ({
@@ -212,6 +222,7 @@ const createInitialCaseStateOnce = async ({
   modelId,
   providerProfileHash,
   knowledgeSnapshotId,
+  knowledgeSnapshotHash,
 }: CreateInitialCaseStateInput): Promise<CaseState> => {
   try {
     const existing = await readCaseState(caseWorkspaceRoot);
@@ -238,6 +249,7 @@ const createInitialCaseStateOnce = async ({
     model_id: modelId,
     provider_profile_hash: providerProfileHash,
     knowledge_snapshot_id: knowledgeSnapshotId,
+    knowledge_snapshot_hash: knowledgeSnapshotHash,
     worker_lease_id: null,
     route: "EVIDENCE_COLLECTION" as const,
     safety_status: "CLEAR" as const,

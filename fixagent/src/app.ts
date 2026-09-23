@@ -27,8 +27,13 @@ import {
   type CaseState,
 } from "./case-store.js";
 import {
+  domainErrorCode,
+  FixAgentDomainError,
+} from "./domain-error.js";
+import {
   EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
   loadCaseKnowledgeSnapshot,
+  materializeCaseKnowledgeSnapshot,
   parseKnowledgeSnapshot,
   validatePublishedCaseResponse,
   type KnowledgeSnapshot,
@@ -79,13 +84,13 @@ interface CreateFixAgentServerOptions {
   knowledgeSnapshot?: KnowledgeSnapshot;
 }
 
-class AgentResponseRejectedError extends Error {
+class AgentResponseRejectedError extends FixAgentDomainError {
   constructor() {
     super("AGENT_RESPONSE_REJECTED");
   }
 }
 
-class AgentResponseNotPublishedError extends Error {
+class AgentResponseNotPublishedError extends FixAgentDomainError {
   constructor() {
     super("AGENT_RESPONSE_NOT_PUBLISHED");
   }
@@ -179,7 +184,8 @@ const readJson = async (request: IncomingMessage): Promise<unknown> => {
     chunks.push(buffer);
   }
 
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const content = Buffer.concat(chunks).toString("utf8");
+  return content.trim() ? JSON.parse(content) : {};
 };
 
 const sendJson = (
@@ -235,12 +241,6 @@ export const createFixAgentServer = ({
     providerProfile ?? buildFrozenProviderProfile(process.env);
   const activeProviderProfileHash = hashProviderProfile(activeProviderProfile);
   const activeKnowledgeSnapshot = parseKnowledgeSnapshot(knowledgeSnapshot);
-  const activeKnowledgeSnapshotContent = `${JSON.stringify(
-    activeKnowledgeSnapshot,
-    null,
-    2,
-  )}\n`;
-  const activeKnowledgeSnapshotId = activeKnowledgeSnapshot.snapshot_id;
 
   const server = createServer(async (request, response) => {
     try {
@@ -255,6 +255,38 @@ export const createFixAgentServer = ({
       }
 
       if (request.method === "POST" && url.pathname === "/api/cases") {
+        const createBody = z
+          .object({ cutoff_at: z.string().datetime().optional() })
+          .strict()
+          .parse(await readJson(request));
+        if (
+          activeKnowledgeSnapshot.mode === "EVALUATION" &&
+          activeKnowledgeSnapshot.documents.length > 0 &&
+          !createBody.cutoff_at
+        ) {
+          sendJson(response, 400, { error: "CASE_CUTOFF_REQUIRED" });
+          return;
+        }
+        let initialKnowledgeSnapshot = activeKnowledgeSnapshot;
+        if (createBody.cutoff_at) {
+          try {
+            initialKnowledgeSnapshot = materializeCaseKnowledgeSnapshot(
+              activeKnowledgeSnapshot,
+              createBody.cutoff_at,
+            );
+          } catch (error) {
+            if (error instanceof FixAgentDomainError) {
+              sendJson(response, 400, { error: error.code });
+              return;
+            }
+            throw error;
+          }
+        }
+        const initialKnowledgeSnapshotContent = `${JSON.stringify(
+          initialKnowledgeSnapshot,
+          null,
+          2,
+        )}\n`;
         const caseId = randomUUID();
         const caseWorkspaceRoot = join(workspaceRoot, caseId);
         const scratchDirectory = join(caseWorkspaceRoot, "scratch");
@@ -297,7 +329,7 @@ export const createFixAgentServer = ({
         );
         await writeFile(
           knowledgeSnapshotFile,
-          activeKnowledgeSnapshotContent,
+          initialKnowledgeSnapshotContent,
           { encoding: "utf8", mode: 0o600, flag: "wx" },
         );
         await chmod(knowledgeSnapshotFile, 0o444);
@@ -308,9 +340,14 @@ export const createFixAgentServer = ({
           providerId: activeProviderProfile.provider_id,
           modelId: activeProviderProfile.requested_model_id,
           providerProfileHash: activeProviderProfileHash,
-          knowledgeSnapshotId: activeKnowledgeSnapshotId,
+          knowledgeSnapshotId: initialKnowledgeSnapshot.snapshot_id,
+          knowledgeSnapshotHash: initialKnowledgeSnapshot.content_hash,
         });
-        sendJson(response, 201, { case_id: caseId });
+        sendJson(response, 201, {
+          case_id: caseId,
+          knowledge_snapshot_id: initialKnowledgeSnapshot.snapshot_id,
+          cutoff_at: initialKnowledgeSnapshot.cutoff_at,
+        });
         return;
       }
 
@@ -345,7 +382,21 @@ export const createFixAgentServer = ({
           caseWorkspaceRoot,
         );
         const knowledgeSnapshotMatches =
-          caseState.knowledge_snapshot_id === caseKnowledgeSnapshot.snapshot_id;
+          caseState.knowledge_snapshot_id ===
+            caseKnowledgeSnapshot.snapshot_id &&
+          caseState.knowledge_snapshot_hash ===
+            caseKnowledgeSnapshot.content_hash;
+        const validateResponseForState = (
+          candidate: unknown,
+          state: CaseState,
+        ): PublishedCaseResponse =>
+          validatePublishedCaseResponse({
+            candidate,
+            snapshot: caseKnowledgeSnapshot,
+            caseKnowledgeSnapshotId: state.knowledge_snapshot_id,
+            caseKnowledgeSnapshotHash: state.knowledge_snapshot_hash,
+            evidenceRefs: state.evidence_refs,
+          });
 
         const body = z
           .object({
@@ -433,12 +484,10 @@ export const createFixAgentServer = ({
               throw new Error("FROZEN_KNOWLEDGE_SNAPSHOT_MISMATCH");
             }
             if (publishedBeforeCompletion) {
-              const recoveredResponse = validatePublishedCaseResponse({
-                candidate: publishedBeforeCompletion.result,
-                snapshot: caseKnowledgeSnapshot,
-                caseKnowledgeSnapshotId: caseState.knowledge_snapshot_id,
-                evidenceRefs: caseState.evidence_refs,
-              });
+              const recoveredResponse = validateResponseForState(
+                publishedBeforeCompletion.result,
+                caseState,
+              );
               return {
                 status: 200,
                 body: {
@@ -570,12 +619,7 @@ export const createFixAgentServer = ({
                     const current = await readCaseState(caseWorkspaceRoot);
                     let parsed: PublishedCaseResponse;
                     try {
-                      parsed = validatePublishedCaseResponse({
-                        candidate,
-                        snapshot: caseKnowledgeSnapshot,
-                        caseKnowledgeSnapshotId: current.knowledge_snapshot_id,
-                        evidenceRefs: current.evidence_refs,
-                      });
+                      parsed = validateResponseForState(candidate, current);
                     } catch {
                       throw new AgentResponseRejectedError();
                     }
@@ -625,10 +669,7 @@ export const createFixAgentServer = ({
                 break;
               } catch (error) {
                 lastAttemptError = error;
-                const code =
-                  error instanceof Error
-                    ? (error.message.split(":", 1)[0] ?? "UNKNOWN_RUNTIME_ERROR")
-                    : "UNKNOWN_RUNTIME_ERROR";
+                const code = domainErrorCode(error, "UNKNOWN_RUNTIME_ERROR");
                 if (
                   [
                     "CASE_IDEMPOTENCY_CONFLICT",
@@ -675,12 +716,10 @@ export const createFixAgentServer = ({
                 });
                 if (committedResponse) {
                   const current = await readCaseState(caseWorkspaceRoot);
-                  publishedResponse = validatePublishedCaseResponse({
-                    candidate: committedResponse.result,
-                    snapshot: caseKnowledgeSnapshot,
-                    caseKnowledgeSnapshotId: current.knowledge_snapshot_id,
-                    evidenceRefs: current.evidence_refs,
-                  });
+                  publishedResponse = validateResponseForState(
+                    committedResponse.result,
+                    current,
+                  );
                   break;
                 }
               }
