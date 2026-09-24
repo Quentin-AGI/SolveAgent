@@ -12,7 +12,11 @@
     "start": "node dist/server.js",
     "test": "node --import tsx --test test/*.test.ts",
     "typecheck": "tsc --noEmit",
-    "architecture:check": "node --import tsx scripts/check-architecture.ts"
+    "architecture:check": "node --import tsx scripts/check-architecture.ts",
+    "eval:convert:camb": "node --import tsx scripts/convert-camb.ts",
+    "eval:score": "node --import tsx scripts/score-evaluation.ts",
+    "eval:run": "node --import tsx scripts/run-evaluation.ts",
+    "knowledge:import:raft": "node --import tsx scripts/import-raft-trajectories.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.280",

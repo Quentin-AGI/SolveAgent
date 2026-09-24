@@ -16,10 +16,13 @@ import { domainErrorCode } from "./domain-error.js";
 import {
   getActionPolicy,
   loadCaseKnowledgeSnapshot,
-  searchKnowledge,
   validatePublishedCaseResponse,
   type KnowledgeSnapshot,
 } from "./knowledge-store.js";
+import {
+  createInMemoryKnowledgeRetriever,
+  type KnowledgeRetriever,
+} from "./knowledge-retriever.js";
 import { publishedCaseResponseShape } from "./published-case-response.js";
 import {
   normalizedProviderValue,
@@ -34,6 +37,7 @@ interface CreateClaudeAgentRuntimeOptions {
   queryAgent?: QueryAgent;
   environment?: NodeJS.ProcessEnv;
   knowledgeSnapshot?: KnowledgeSnapshot;
+  knowledgeRetriever?: KnowledgeRetriever;
 }
 
 const systemPrompt = `You are FixAgent, a single hardware-support Agent for CarPlay and in-vehicle display terminals.
@@ -144,6 +148,7 @@ const toolResult = (value: Record<string, unknown>) => ({
 const createFixAgentMcpServer = (
   request: AgentRunRequest,
   snapshot: KnowledgeSnapshot,
+  knowledgeRetriever: KnowledgeRetriever,
 ) => {
   const getProductContext = tool(
     "get_product_context",
@@ -168,7 +173,12 @@ const createFixAgentMcpServer = (
     async ({ query, max_results: maxResults }) =>
       toolResult({
         knowledge_snapshot_id: snapshot.snapshot_id,
-        results: searchKnowledge(snapshot, "PRODUCT_DOC", query, maxResults),
+        results: await knowledgeRetriever.search({
+          snapshot,
+          kind: "PRODUCT_DOC",
+          query,
+          ...(maxResults === undefined ? {} : { maxResults }),
+        }),
       }),
     { annotations: { idempotentHint: true, openWorldHint: false }, alwaysLoad: true },
   );
@@ -179,12 +189,12 @@ const createFixAgentMcpServer = (
     async ({ query, max_results: maxResults }) =>
       toolResult({
         knowledge_snapshot_id: snapshot.snapshot_id,
-        results: searchKnowledge(
+        results: await knowledgeRetriever.search({
           snapshot,
-          "HISTORICAL_CASE",
+          kind: "HISTORICAL_CASE",
           query,
-          maxResults,
-        ),
+          ...(maxResults === undefined ? {} : { maxResults }),
+        }),
       }),
     { annotations: { idempotentHint: true, openWorldHint: false }, alwaysLoad: true },
   );
@@ -280,6 +290,7 @@ export const createClaudeAgentRuntime = ({
   queryAgent = query,
   environment = process.env,
   knowledgeSnapshot,
+  knowledgeRetriever = createInMemoryKnowledgeRetriever(),
 }: CreateClaudeAgentRuntimeOptions = {}): AgentRuntime => ({
   async run(request) {
     await request.trace({
@@ -304,6 +315,7 @@ export const createClaudeAgentRuntime = ({
     const deniedReadRoots = [
       environment.FIXAGENT_HOST_HOME,
       environment.FIXAGENT_CASES_ROOT,
+      environment.FIXAGENT_EVALUATION_ROOT,
     ]
       .filter((path): path is string => Boolean(path))
       .map((path) => resolve(path));
@@ -315,7 +327,11 @@ export const createClaudeAgentRuntime = ({
       settingSources: ["project"],
       skills: ["hardware-troubleshooting"],
       mcpServers: {
-        fixagent: createFixAgentMcpServer(trackedRequest, snapshot),
+        fixagent: createFixAgentMcpServer(
+          trackedRequest,
+          snapshot,
+          knowledgeRetriever,
+        ),
       },
       strictMcpConfig: true,
       allowedTools: [

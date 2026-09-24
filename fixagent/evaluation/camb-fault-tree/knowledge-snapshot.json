@@ -1,0 +1,273 @@
+{
+  "schema_version": "fixagent.knowledge-snapshot.v0",
+  "snapshot_id": "CAMB_FAULT_TREE_V1",
+  "mode": "EVALUATION",
+  "created_at": "2026-09-24T00:00:00.000Z",
+  "corpus_cutoff_at": "2026-09-24T00:00:00.000Z",
+  "cutoff_at": "2026-09-24T00:00:00.000Z",
+  "evaluation_cases": [
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0001",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0001",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0002",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0002",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0003",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0003",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0004",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0004",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0005",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0005",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0006",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0006",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0007",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0007",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0008",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0008",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0009",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0009",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0010",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0010",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0011",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0011",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0012",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0012",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0013",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0013",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0014",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0014",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0015",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0015",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0016",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0016",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0017",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0017",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0018",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0018",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0019",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0019",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0020",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0020",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0021",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0021",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0022",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0022",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0023",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0023",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0024",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0024",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0025",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0025",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0026",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0026",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0027",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0027",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0028",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0028",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0029",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0029",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0030",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0030",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0031",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0031",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0032",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0032",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0033",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0033",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0034",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0034",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0035",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0035",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0036",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0036",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0037",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0037",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0038",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0038",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0039",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0039",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0040",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0040",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0041",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0041",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0042",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0042",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0043",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0043",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0044",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0044",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0045",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0045",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0046",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0046",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0047",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0047",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0048",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0048",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0049",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0049",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "CAMB-FAULT-TREE-0050",
+      "target_issue_id": "CAMB-FAULT-TREE-SOURCE-0050",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    }
+  ],
+  "case_binding": null,
+  "product_context": {
+    "product_family": "CAMB_CIVIL_AVIATION",
+    "configuration_id": "BENCHMARK",
+    "hardware_version": "UNSPECIFIED",
+    "software_version": "UNSPECIFIED",
+    "region": "CN"
+  },
+  "documents": [],
+  "action_cards": [],
+  "prohibited_actions": [],
+  "knowledge_conflicts": [],
+  "content_hash": "a1185cb70b7b39f401871f36b9fcbc8a0ef862c200393cf5b776c618b01f1736"
+}

@@ -51,6 +51,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
       CLAUDE_CONFIG_DIR: "/isolated/cases/case-123/.home/.claude",
       FIXAGENT_HOST_HOME: "/host-home",
       FIXAGENT_CASES_ROOT: "/isolated/cases",
+      FIXAGENT_EVALUATION_ROOT: "/isolated/evaluation",
       ANTHROPIC_AUTH_TOKEN: "secret",
     },
     queryAgent(parameters) {
@@ -90,7 +91,11 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
   assert.deepEqual(captured.options?.sandbox?.filesystem, {
     allowWrite: [resolve("/isolated/cases/case-123/scratch")],
     denyWrite: [resolve("/isolated/cases/case-123")],
-    denyRead: [resolve("/host-home"), resolve("/isolated/cases")],
+    denyRead: [
+      resolve("/host-home"),
+      resolve("/isolated/cases"),
+      resolve("/isolated/evaluation"),
+    ],
     allowRead: [
       resolve("/isolated/cases/case-123"),
       resolve("/isolated/cases/case-123/.claude/skills"),
@@ -107,6 +112,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
   assert.equal(captured.options?.env?.npm_config_registry, undefined);
   assert.equal(captured.options?.env?.FIXAGENT_HOST_HOME, undefined);
   assert.equal(captured.options?.env?.FIXAGENT_CASES_ROOT, undefined);
+  assert.equal(captured.options?.env?.FIXAGENT_EVALUATION_ROOT, undefined);
   assert.equal(savedSessionId, "00000000-0000-4000-8000-000000000002");
 
   const stopHook = captured.options?.hooks?.Stop?.[0]?.hooks[0];

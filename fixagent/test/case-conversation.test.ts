@@ -682,9 +682,11 @@ test("host publishes an action only when its frozen Knowledge and Action Card re
     const {
       case_id: caseId,
       knowledge_snapshot_id: caseKnowledgeSnapshotId,
+      knowledge_snapshot_hash: caseKnowledgeSnapshotHash,
     } = (await created.json()) as {
       case_id: string;
       knowledge_snapshot_id: string;
+      knowledge_snapshot_hash: string;
     };
     const caseWorkspaceRoot = join(workspaceRoot, caseId);
     const initial = await readCaseState(caseWorkspaceRoot);
@@ -728,6 +730,7 @@ test("host publishes an action only when its frozen Knowledge and Action Card re
       ),
     ) as { content_hash: string };
     assert.equal(state.knowledge_snapshot_id, caseKnowledgeSnapshotId);
+    assert.equal(state.knowledge_snapshot_hash, caseKnowledgeSnapshotHash);
     assert.notEqual(state.knowledge_snapshot_id, knowledgeSnapshot.snapshot_id);
     assert.equal(state.knowledge_snapshot_hash, frozenSnapshot.content_hash);
   } finally {

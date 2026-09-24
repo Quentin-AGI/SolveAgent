@@ -1,6 +1,6 @@
 import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { AgentRunRequest, AgentRuntime } from "./app.js";
@@ -13,6 +13,11 @@ import {
   providerRuntimeEnvironmentKeys,
   selectProviderCredentials,
 } from "./provider-profile.js";
+
+const evaluationRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../evaluation",
+);
 
 export const buildCaseWorkerEnvironment = (
   source: NodeJS.ProcessEnv,
@@ -32,6 +37,7 @@ export const buildCaseWorkerEnvironment = (
     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
     FIXAGENT_HOST_HOME: source.HOME,
     FIXAGENT_CASES_ROOT: dirname(caseWorkspaceRoot),
+    FIXAGENT_EVALUATION_ROOT: evaluationRoot,
   };
 
   for (const key of providerRuntimeEnvironmentKeys) {

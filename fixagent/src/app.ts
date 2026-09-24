@@ -779,6 +779,7 @@ export const createFixAgentServer = ({
         sendJson(response, 201, {
           case_id: caseId,
           knowledge_snapshot_id: initialKnowledgeSnapshot.snapshot_id,
+          knowledge_snapshot_hash: initialKnowledgeSnapshot.content_hash,
           cutoff_at: initialKnowledgeSnapshot.cutoff_at,
           evaluation_case_id:
             initialKnowledgeSnapshot.case_binding?.evaluation_case_id ?? null,

@@ -314,6 +314,11 @@ const collectTargetRelatedIssueIds = (
   return excludedIssueIds;
 };
 
+export const isKnowledgeDocumentApplicable = (
+  snapshot: KnowledgeSnapshot,
+  document: KnowledgeSnapshot["documents"][number],
+): boolean => isApplicable(document.applicability, snapshot.product_context);
+
 export const createKnowledgeSnapshot = (
   input: KnowledgeSnapshotInput,
 ): KnowledgeSnapshot => {
