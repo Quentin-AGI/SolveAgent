@@ -36,7 +36,12 @@ export const publishedCaseResponseShape = {
     .max(MAX_PUBLISHED_CONFLICT_REFS)
     .optional()
     .describe("Unresolved approved Knowledge conflicts acknowledged by the response"),
-  response_type: z.enum(["EVIDENCE_REQUEST", "INFORMATION", "ACTION"]),
+  response_type: z.enum([
+    "GENERAL",
+    "EVIDENCE_REQUEST",
+    "INFORMATION",
+    "ACTION",
+  ]),
 };
 
 export const publishedCaseResponseSchema = z
@@ -104,6 +109,17 @@ export const publishedCaseResponseSchema = z
         code: "custom",
         path: ["action_card_refs"],
         message: "Only action responses may reference Action Cards",
+      });
+    }
+    if (
+      response.response_type === "GENERAL" &&
+      (response.claim_refs.length > 0 ||
+        (response.knowledge_conflict_refs?.length ?? 0) > 0)
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["response_type"],
+        message: "General responses cannot make approved Knowledge claims",
       });
     }
   });

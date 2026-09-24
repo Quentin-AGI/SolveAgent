@@ -47,7 +47,21 @@ Use get_case_state to reuse confirmed evidence and avoid repeating stable questi
 Knowledge and Action Card references must contain the exact ID and version returned by these tools.
 When get_action_policy reports an unresolved Knowledge conflict, cite both sides, state the uncertainty, include its exact conflict ID in knowledge_conflict_refs, and do not propose its blocked actions.
 All user-visible diagnostic, explanatory, or operational content must be submitted through mcp__fixagent__publish_case_response.
+Use response_type GENERAL with empty references for greetings, model-capability questions, and other ordinary conversation that makes no product claim or device recommendation.
 Do not rely on ordinary assistant text being shown to the user.`;
+
+const isGeneralConversationPrompt = (message: string): boolean => {
+  const normalized = message.replace(/\s+/gu, " ").trim();
+  return (
+    /^(?:(?:请问|请|能否|可以)?(?:介绍一下你自己|告诉我你是谁|你是谁|你是什么模型|你能做什么|你可以做什么|你能帮我做什么|(?:目前|当前|这个|目前这个|当前这个)?模型(?:具备|有)什么能力)|帮助)[？?！!。.]?$/u.test(
+      normalized,
+    ) ||
+    /^(?:who are you|what model are you|what can you do|what are your capabilities|help)[?!.]?$/iu.test(
+      normalized,
+    ) ||
+    /^(?:你?好|您好|hello|hi|谢谢|thanks?)[！!。.?？\s]*$/iu.test(normalized)
+  );
+};
 
 const buildAgentEnvironment = (
   source: NodeJS.ProcessEnv,
@@ -62,7 +76,6 @@ const buildAgentEnvironment = (
     CLAUDE_AGENT_SDK_CLIENT_APP: "fixagent-v0/0.1.0",
     CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",
     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
-    CLAUDE_CODE_SKIP_PROMPT_HISTORY: "1",
   };
 
   for (const key of providerRuntimeEnvironmentKeys) {
@@ -269,9 +282,21 @@ export const createClaudeAgentRuntime = ({
   knowledgeSnapshot,
 }: CreateClaudeAgentRuntimeOptions = {}): AgentRuntime => ({
   async run(request) {
+    await request.trace({
+      type: "runtime_start",
+      policy_version: "FIXAGENT_RUNTIME_V2",
+      resume_requested: Boolean(request.sessionId),
+    });
     const snapshot =
       knowledgeSnapshot ?? (await loadCaseKnowledgeSnapshot(request.cwd));
-    const fixagent = createFixAgentMcpServer(request, snapshot);
+    let responsePublished = false;
+    const trackedRequest: AgentRunRequest = {
+      ...request,
+      async publish(candidate) {
+        await request.publish(candidate);
+        responsePublished = true;
+      },
+    };
     const model =
       normalizedProviderValue(environment.FIXAGENT_MODEL) ??
       normalizedProviderValue(environment.ANTHROPIC_MODEL);
@@ -283,11 +308,15 @@ export const createClaudeAgentRuntime = ({
       .filter((path): path is string => Boolean(path))
       .map((path) => resolve(path));
 
-    const options: NonNullable<QueryParameters["options"]> = {
+    const createOptions = (
+      sessionId?: string,
+    ): NonNullable<QueryParameters["options"]> => ({
       cwd: request.cwd,
       settingSources: ["project"],
       skills: ["hardware-troubleshooting"],
-      mcpServers: { fixagent },
+      mcpServers: {
+        fixagent: createFixAgentMcpServer(trackedRequest, snapshot),
+      },
       strictMcpConfig: true,
       allowedTools: [
         "Bash",
@@ -333,31 +362,124 @@ export const createClaudeAgentRuntime = ({
         append: systemPrompt,
         snapshot: true,
       },
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              async (input) => {
+                if (
+                  input.hook_event_name !== "Stop" ||
+                  responsePublished ||
+                  input.stop_hook_active
+                ) {
+                  return { continue: true };
+                }
+                const instruction =
+                  "Your response has not been published. Call mcp__fixagent__publish_case_response now. Use GENERAL with empty references only for ordinary conversation without product claims or device recommendations.";
+                return {
+                  decision: "block" as const,
+                  reason: instruction,
+                  hookSpecificOutput: {
+                    hookEventName: "Stop" as const,
+                    additionalContext: instruction,
+                  },
+                };
+              },
+            ],
+          },
+        ],
+      },
+      persistSession: true,
       maxTurns: 8,
       maxBudgetUsd: 0.5,
-      ...(request.sessionId
-        ? { resume: request.sessionId, forkSession: true }
-        : {}),
+      ...(sessionId ? { resume: sessionId, forkSession: true } : {}),
       ...(model ? { model } : {}),
+    });
+
+    const consumeQuery = async (
+      options: NonNullable<QueryParameters["options"]>,
+    ): Promise<{
+      architectureInitSeen: boolean;
+      missingSession: boolean;
+      plainResult?: string;
+    }> => {
+      let architectureInitSeen = false;
+      let missingSession = false;
+      let plainResult: string | undefined;
+
+      try {
+        for await (const message of queryAgent({
+          prompt: request.userMessage,
+          options,
+        })) {
+          await request.trace(message);
+          if (message.type === "system" && message.subtype === "init") {
+            assertArchitectureInit(message, environment);
+            await request.saveSession(message.session_id);
+            architectureInitSeen = true;
+          }
+          if (message.type === "result" && message.subtype === "success") {
+            plainResult = message.result.trim() || undefined;
+          }
+          if (
+            message.type === "result" &&
+            message.subtype === "error_during_execution" &&
+            message.errors.some((error) =>
+              error.includes("No conversation found with session ID"),
+            )
+          ) {
+            missingSession = true;
+          }
+          // SDK output remains internal. Only publish_case_response reaches the UI.
+        }
+      } catch (error) {
+        if (!missingSession) throw error;
+      }
+
+      return {
+        architectureInitSeen,
+        missingSession,
+        ...(plainResult ? { plainResult } : {}),
+      };
     };
 
-    let architectureInitSeen = false;
-
-    for await (const message of queryAgent({
-      prompt: request.userMessage,
-      options,
-    })) {
-      await request.trace(message);
-      if (message.type === "system" && message.subtype === "init") {
-        assertArchitectureInit(message, environment);
-        await request.saveSession(message.session_id);
-        architectureInitSeen = true;
+    let outcome = await consumeQuery(createOptions(request.sessionId));
+    if (
+      request.sessionId &&
+      !responsePublished &&
+      !outcome.architectureInitSeen &&
+      outcome.missingSession
+    ) {
+      await request.trace({
+        type: "session_resume_fallback",
+        missing_session_id: request.sessionId,
+      });
+      try {
+        outcome = await consumeQuery(createOptions());
+      } catch (error) {
+        await request.trace({
+          type: "session_resume_fallback_failed",
+          code: domainErrorCode(error, "UNKNOWN_RUNTIME_ERROR"),
+          message: error instanceof Error ? error.message : "UNKNOWN_RUNTIME_ERROR",
+        });
+        throw error;
       }
-      // SDK output remains internal. Only publish_case_response reaches the UI.
     }
 
-    if (!architectureInitSeen) {
+    if (!outcome.architectureInitSeen) {
       throw new Error("ARCHITECTURE_GATE_FAILED: SDK init not observed");
+    }
+    if (
+      !responsePublished &&
+      outcome.plainResult &&
+      isGeneralConversationPrompt(request.userMessage)
+    ) {
+      await trackedRequest.publish({
+        message_markdown: outcome.plainResult,
+        claim_refs: [],
+        action_card_refs: [],
+        response_type: "GENERAL",
+      });
     }
   },
 });

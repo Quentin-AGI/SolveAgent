@@ -7,6 +7,9 @@ const messages = document.querySelector("#messages");
 const thread = document.querySelector("#thread");
 const status = document.querySelector("#run-status");
 const submitButton = document.querySelector("#submit-button");
+const attachmentButton = document.querySelector("#attachment-button");
+const attachmentInput = document.querySelector("#attachment-input");
+const attachmentTray = document.querySelector("#attachment-tray");
 const threadTitle = document.querySelector("#thread-title");
 const caseList = document.querySelector("#case-list");
 const noCases = document.querySelector("#no-cases");
@@ -50,6 +53,35 @@ let defaultModelId;
 let modelConfigurationEnabled = false;
 let selectedSettingsProviderId = "qwen";
 let settingsBusy = false;
+let pendingAttachments = [];
+
+const maxAttachmentCount = 4;
+const maxAttachmentBytes = 4 * 1024 * 1024;
+const maxAttachmentTotalBytes = 8 * 1024 * 1024;
+const supportedAttachmentTypes = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "application/pdf",
+  "application/json",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+]);
+const attachmentTypeByExtension = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+  pdf: "application/pdf",
+  json: "application/json",
+  txt: "text/plain",
+  log: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+};
 
 const providerDefaultApiUrls = {
   qwen: "https://dashscope.aliyuncs.com/apps/anthropic",
@@ -85,11 +117,31 @@ function appendMessage(role, text, options = {}) {
   speaker.textContent = role === "user" ? "你：" : "FixAgent：";
   paragraph.append(speaker, document.createTextNode(text));
   content.append(paragraph);
+
+  const attachmentNames = Array.isArray(options.attachments)
+    ? options.attachments
+    : [];
+  if (attachmentNames.length > 0) {
+    const attachmentList = document.createElement("div");
+    attachmentList.className = "message-attachments";
+    for (const name of attachmentNames) {
+      const attachment = document.createElement("span");
+      attachment.textContent = name;
+      attachment.title = name;
+      attachmentList.append(attachment);
+    }
+    content.append(attachmentList);
+  }
   article.append(content);
   messages.append(article);
 
   if (options.record !== false) {
-    activeMessages.push({ role, text, error: Boolean(options.error) });
+    activeMessages.push({
+      role,
+      text,
+      error: Boolean(options.error),
+      attachments: attachmentNames,
+    });
   }
 
   scrollToLatest();
@@ -180,7 +232,11 @@ function syncModelPickerState() {
   const isLocked = navigationLocked || Boolean(caseId);
   const canChoose = configuredModelOptions().length > 0 && !isLocked;
   const canOpen = modelOptions.length > 0 && !isLocked;
-  submitButton.disabled = navigationLocked || (!caseId && !model?.configured);
+  const hasContent = Boolean(input.value.trim()) || pendingAttachments.length > 0;
+  submitButton.disabled =
+    navigationLocked || !hasContent || (!caseId && !model?.configured);
+  attachmentButton.disabled = navigationLocked;
+  attachmentInput.disabled = navigationLocked;
   modelPickerButton.disabled = !canOpen;
   modelPickerButton.title = caseId
     ? "模型已随 Case 冻结；新建 Case 后可重新选择"
@@ -190,6 +246,115 @@ function syncModelPickerState() {
   if (!canOpen) closeModelMenu();
   renderModelOptions();
   syncModelSettingsButton();
+}
+
+function renderAttachmentTray() {
+  attachmentTray.replaceChildren();
+  attachmentTray.hidden = pendingAttachments.length === 0;
+
+  pendingAttachments.forEach((attachment, index) => {
+    const chip = document.createElement("div");
+    chip.className = "attachment-chip";
+
+    const name = document.createElement("span");
+    name.textContent = attachment.name;
+    name.title = attachment.name;
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "attachment-remove";
+    remove.setAttribute("aria-label", `移除文件 ${attachment.name}`);
+    remove.title = "移除文件";
+    remove.innerHTML = '<svg><use href="#icon-x"></use></svg>';
+    remove.addEventListener("click", () => {
+      pendingAttachments.splice(index, 1);
+      renderAttachmentTray();
+      syncModelPickerState();
+      input.focus();
+    });
+
+    chip.append(name, remove);
+    attachmentTray.append(chip);
+  });
+  syncComposerSpace();
+}
+
+function clearPendingAttachments() {
+  pendingAttachments = [];
+  attachmentInput.value = "";
+  renderAttachmentTray();
+}
+
+function attachmentMediaType(file) {
+  if (supportedAttachmentTypes.has(file.type)) return file.type;
+  const extension = file.name.split(".").at(-1)?.toLocaleLowerCase();
+  return extension ? attachmentTypeByExtension[extension] : undefined;
+}
+
+function readAttachment(file, mediaType) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      const separator = result.indexOf(",");
+      if (separator < 0) {
+        reject(new Error("ATTACHMENT_READ_FAILED"));
+        return;
+      }
+      resolve({
+        name: file.name,
+        media_type: mediaType,
+        data_base64: result.slice(separator + 1),
+        size: file.size,
+      });
+    });
+    reader.addEventListener("error", () =>
+      reject(reader.error || new Error("ATTACHMENT_READ_FAILED")),
+    );
+    reader.readAsDataURL(file);
+  });
+}
+
+async function addAttachments(fileList) {
+  const files = [...fileList];
+  if (pendingAttachments.length + files.length > maxAttachmentCount) {
+    window.alert(`每次最多添加 ${maxAttachmentCount} 个文件。`);
+    return;
+  }
+
+  const selected = [];
+  for (const file of files) {
+    const mediaType = attachmentMediaType(file);
+    if (!mediaType) {
+      window.alert(`不支持文件“${file.name}”。`);
+      return;
+    }
+    if (!file.size || file.size > maxAttachmentBytes) {
+      window.alert(`文件“${file.name}”必须小于 4 MB。`);
+      return;
+    }
+    selected.push({ file, mediaType });
+  }
+
+  const totalBytes = [...pendingAttachments, ...files].reduce(
+    (sum, item) => sum + item.size,
+    0,
+  );
+  if (totalBytes > maxAttachmentTotalBytes) {
+    window.alert("文件总大小不能超过 8 MB。");
+    return;
+  }
+
+  try {
+    const attachments = await Promise.all(
+      selected.map(({ file, mediaType }) => readAttachment(file, mediaType)),
+    );
+    pendingAttachments.push(...attachments);
+    renderAttachmentTray();
+    syncModelPickerState();
+  } catch {
+    window.alert("文件读取失败，请重新选择。");
+  }
 }
 
 function syncModelSettingsButton() {
@@ -510,11 +675,13 @@ function activateCase(record) {
     for (const message of activeMessages) {
       appendMessage(message.role, message.text, {
         error: message.error,
+        attachments: message.attachments,
         record: false,
       });
     }
   }
 
+  clearPendingAttachments();
   threadTitle.textContent = record.title || "诊断 Case";
   document.title = `${threadTitle.textContent} · FixAgent`;
   status.textContent = record.status || `Case ${caseId.slice(0, 8)}`;
@@ -534,6 +701,7 @@ function startNewCase() {
   document.title = "FixAgent";
   status.textContent = "尚未创建 Case";
   input.value = "";
+  clearPendingAttachments();
   resizeInput();
   syncModelPickerState();
   renderCaseList();
@@ -578,16 +746,21 @@ function setSidebarAccessibility(isVisible) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   const message = input.value.trim();
-  if (!message || submitButton.disabled) return;
+  const attachments = [...pendingAttachments];
+  if ((!message && attachments.length === 0) || submitButton.disabled) return;
+
+  const visibleMessage = message || "请分析我上传的附件。";
+  const attachmentNames = attachments.map((attachment) => attachment.name);
 
   const caseTitle = caseId
     ? recentCases.find((item) => item.id === caseId)?.title
-    : titleFromMessage(message);
+    : titleFromMessage(message || attachmentNames[0] || "附件分析");
 
   setBusy(true);
   status.textContent = "正在分析…";
-  appendMessage("user", message);
+  appendMessage("user", visibleMessage, { attachments: attachmentNames });
   input.value = "";
+  clearPendingAttachments();
   resizeInput();
   const thinking = appendThinking();
 
@@ -612,6 +785,13 @@ form.addEventListener("submit", async (event) => {
       body: JSON.stringify({
         message,
         idempotency_key: crypto.randomUUID(),
+        attachments: attachments.map(
+          ({ name, media_type, data_base64 }) => ({
+            name,
+            media_type,
+            data_base64,
+          }),
+        ),
       }),
     });
 
@@ -626,7 +806,15 @@ form.addEventListener("submit", async (event) => {
     saveCurrentCase(caseTitle);
   } catch (error) {
     thinking.remove();
-    appendMessage("agent", "本次回答未通过发布校验，请稍后重试。", {
+    const errorMessage =
+      error instanceof Error &&
+      ["INVALID_REQUEST", "REQUEST_TOO_LARGE"].includes(error.message)
+        ? "文件或消息不符合上传要求，请检查后重试。"
+        : error instanceof Error &&
+            error.message === "AGENT_RESPONSE_NOT_PUBLISHED"
+          ? "模型未完成回答发布，请重试。"
+          : "请求未完成，请稍后重试。";
+    appendMessage("agent", errorMessage, {
       error: true,
     });
     status.textContent = error instanceof Error ? error.message : "请求失败";
@@ -638,12 +826,22 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-input.addEventListener("input", resizeInput);
+input.addEventListener("input", () => {
+  resizeInput();
+  syncModelPickerState();
+});
 input.addEventListener("keydown", (event) => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
     event.preventDefault();
     form.requestSubmit();
   }
+});
+
+attachmentButton.addEventListener("click", () => attachmentInput.click());
+attachmentInput.addEventListener("change", async () => {
+  const files = [...(attachmentInput.files || [])];
+  attachmentInput.value = "";
+  if (files.length) await addAttachments(files);
 });
 
 newCaseButton.addEventListener("click", startNewCase);

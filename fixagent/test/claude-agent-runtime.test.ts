@@ -77,6 +77,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
   assert.equal(captured.options?.cwd, "/isolated/cases/case-123");
   assert.deepEqual(captured.options?.settingSources, ["project"]);
   assert.deepEqual(captured.options?.skills, ["hardware-troubleshooting"]);
+  assert.equal(captured.options?.persistSession, true);
   assert.equal(captured.options?.tools, undefined);
   assert.deepEqual(captured.options?.disallowedTools, ["Agent"]);
   assert.deepEqual(captured.options?.allowedTools, [
@@ -101,12 +102,92 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
     { name: "ANTHROPIC_AUTH_TOKEN", mode: "deny" },
   ]);
   assert.equal(captured.options?.env?.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, "1");
-  assert.equal(captured.options?.env?.CLAUDE_CODE_SKIP_PROMPT_HISTORY, "1");
+  assert.equal(captured.options?.env?.CLAUDE_CODE_SKIP_PROMPT_HISTORY, undefined);
   assert.equal(captured.options?.env?.CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS, "1");
   assert.equal(captured.options?.env?.npm_config_registry, undefined);
   assert.equal(captured.options?.env?.FIXAGENT_HOST_HOME, undefined);
   assert.equal(captured.options?.env?.FIXAGENT_CASES_ROOT, undefined);
   assert.equal(savedSessionId, "00000000-0000-4000-8000-000000000002");
+
+  const stopHook = captured.options?.hooks?.Stop?.[0]?.hooks[0];
+  assert.ok(stopHook);
+  const stopOutput = await stopHook(
+    {
+      hook_event_name: "Stop",
+      stop_hook_active: false,
+      last_assistant_message: "普通文本回答",
+    } as never,
+    undefined,
+    { signal: new AbortController().signal },
+  );
+  assert.equal("decision" in stopOutput ? stopOutput.decision : undefined, "block");
+});
+
+test("general questions fall back to a host-published response when a provider skips the publish tool", async () => {
+  let published: unknown;
+  const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
+    environment: {},
+    queryAgent() {
+      return (async function* (): AsyncGenerator<SDKMessage> {
+        yield validInitMessage;
+        yield {
+          type: "result",
+          subtype: "success",
+          result: "我可以协助分析问题和附件。",
+        } as SDKMessage;
+      })();
+    },
+  });
+
+  await runtime.run({
+    caseId: "case-123",
+    cwd: "/isolated/cases/case-123",
+    userMessage: "目前这个模型具备什么能力？",
+    async publish(candidate) {
+      published = candidate;
+    },
+    async trace() {},
+    async saveSession() {},
+  });
+
+  assert.deepEqual(published, {
+    message_markdown: "我可以协助分析问题和附件。",
+    claim_refs: [],
+    action_card_refs: [],
+    response_type: "GENERAL",
+  });
+});
+
+test("diagnostic questions never use the plain-text fallback", async () => {
+  let published: unknown;
+  const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
+    environment: {},
+    queryAgent() {
+      return (async function* (): AsyncGenerator<SDKMessage> {
+        yield validInitMessage;
+        yield {
+          type: "result",
+          subtype: "success",
+          result: "请拆开设备检查线路。",
+        } as SDKMessage;
+      })();
+    },
+  });
+
+  await runtime.run({
+    caseId: "case-123",
+    cwd: "/isolated/cases/case-123",
+    userMessage: "帮助我修复车辆屏幕",
+    async publish(candidate) {
+      published = candidate;
+    },
+    async trace() {},
+    async saveSession() {},
+  });
+
+  assert.equal(published, undefined);
 });
 
 test("Case is rejected when SDK init cannot prove the core Skill is available", async () => {
@@ -164,6 +245,54 @@ test("a returning Case resumes its own Claude Agent SDK Session", async () => {
     "00000000-0000-4000-8000-000000000099",
   );
   assert.equal(captured?.options?.forkSession, true);
+});
+
+test("a Case starts a fresh persisted Session when its saved Session is missing", async () => {
+  const captured: Parameters<typeof query>[0][] = [];
+  let savedSessionId: string | undefined;
+  const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
+    environment: {},
+    queryAgent(parameters) {
+      captured.push(parameters);
+      return (async function* (): AsyncGenerator<SDKMessage> {
+        if (parameters.options?.resume) {
+          yield {
+            type: "result",
+            subtype: "error_during_execution",
+            errors: [
+              `No conversation found with session ID: ${parameters.options.resume}`,
+            ],
+          } as SDKMessage;
+          throw new Error("SDK process exited after the missing Session result");
+        }
+        yield {
+          ...validInitMessage,
+          session_id: "00000000-0000-4000-8000-000000000099",
+        } as SDKMessage;
+      })();
+    },
+  });
+
+  await runtime.run({
+    caseId: "case-123",
+    cwd: "/isolated/cases/case-123",
+    userMessage: "请读取附件",
+    sessionId: "00000000-0000-4000-8000-000000000002",
+    async publish() {},
+    async trace() {},
+    async saveSession(sessionId) {
+      savedSessionId = sessionId;
+    },
+  });
+
+  assert.equal(captured.length, 2);
+  assert.equal(
+    captured[0]?.options?.resume,
+    "00000000-0000-4000-8000-000000000002",
+  );
+  assert.equal(captured[1]?.options?.resume, undefined);
+  assert.equal(savedSessionId, "00000000-0000-4000-8000-000000000099");
 });
 
 test("Case is rejected when observed model differs from the Frozen Provider Profile", async () => {

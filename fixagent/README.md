@@ -13,6 +13,7 @@ The current slice provides:
 - in-process MCP tools for product context, approved product-document and historical-Case search, applicable Action Card policy, and current Case State;
 - `publish_case_response` as the only user-visible response path, with exact structured Knowledge and Action Card references validated again by the host process;
 - a minimal Case conversation UI carrying the mandatory `NON-SCORED · DATA_NO_GO` status;
+- text, image, PDF, JSON, Markdown, CSV, and log attachments stored privately inside the isolated Case Scratch directory;
 - a Codex-style model picker backed by a server-side provider registry, with the selected non-secret profile frozen into each Case;
 - startup checks for native Bash, Read, Edit, Write, the core Skill, and the SDK MCP server;
 - a deterministic pre-Agent text Safety Gate that emits only the frozen fallback sentence and atomically creates a clearly labelled simulated `SAFETY_HANDOFF`.
@@ -20,7 +21,7 @@ The current slice provides:
 
 The built-in snapshot is deliberately empty, so the default runtime can still publish only non-operational evidence requests. A reviewed, hash-valid snapshot must be supplied through `FIXAGENT_KNOWLEDGE_SNAPSHOT_FILE` before knowledge-backed information can be published. Its sources carry separate publication and retrieval timestamps, and every entry records the approving person, time, and authority. Evaluation snapshots also carry a hash-locked Case catalog: the request selects an `evaluation_case_id`, while the server derives the Case cutoff from that entry's Issue creation time. Historical Case knowledge is stored as attributable, timestamped content items, allowing the materializer to remove the target Issue, its comments and solution, transitively linked duplicates, generated FAQs, and all content published after the cutoff. Approved Knowledge conflicts name both sources, their blocked actions, and any evidence-based resolution; unresolved conflicts require both citations and remain recorded in Case State, while blocked actions stay unavailable. Action Cards additionally remain unavailable until all Case evidence prerequisites are present, including the universal safely-parked evidence reference; Level 2 cards require an exact product/version `ACTION_SOP`, and applicable prohibitions veto matching cards. No network source is promoted to `EVAL_APPROVED` automatically.
 
-It does not yet implement the approved knowledge corpus, image ingestion, vision and in-session Safety signals, Case State write tools, action-result recording, ordinary Handoff, Evidence Broker, or provider certification. It is an architecture-validation slice and must not be used for live device troubleshooting.
+It does not yet implement the approved knowledge corpus, provider-certified vision behavior, in-session Safety signals, Case State write tools, action-result recording, ordinary Handoff, Evidence Broker, or provider certification. It is an architecture-validation slice and must not be used for live device troubleshooting.
 
 ## Install and verify
 
@@ -45,6 +46,8 @@ pnpm dev
 ```
 
 The application defaults to <http://127.0.0.1:4174>. SDK events are written to the Case's private Trace; the HTTP response is created only after the Agent calls `mcp__fixagent__publish_case_response` and the deterministic publication boundary accepts it.
+
+The composer accepts up to four files per message, with a 4 MB per-file and 8 MB total limit. Supported formats are JPEG, PNG, GIF, WebP, PDF, JSON, plain text, Markdown, and CSV. Attachments are written with mode `0600` under the Case's `scratch/attachments` directory and are explicitly presented to the Agent as untrusted evidence.
 
 ## Model registry
 

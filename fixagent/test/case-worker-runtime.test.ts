@@ -30,7 +30,7 @@ test("Case Worker receives only the provider profile and required process enviro
   assert.equal(environment.DATABASE_URL, undefined);
   assert.equal(environment.RANDOM_SERVER_SECRET, undefined);
   assert.equal(environment.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, "1");
-  assert.equal(environment.CLAUDE_CODE_SKIP_PROMPT_HISTORY, "1");
+  assert.equal(environment.CLAUDE_CODE_SKIP_PROMPT_HISTORY, undefined);
 });
 
 test("Case Worker rejects ambiguous provider credential types", () => {

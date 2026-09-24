@@ -256,6 +256,71 @@ test("user creates a Case and receives only the Agent-published response", async
   }
 });
 
+test("user can send a file-only message from the isolated Case workspace", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  let runtimeMessage: string | undefined;
+  const app = createFixAgentServer({
+    workspaceRoot,
+    runtime: {
+      async run(request) {
+        runtimeMessage = request.userMessage;
+        await request.publish({
+          message_markdown: "我已收到附件，请补充你希望确认的问题。",
+          claim_refs: [],
+          action_card_refs: [],
+          response_type: "EVIDENCE_REQUEST",
+        });
+      },
+    },
+  });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: "",
+          idempotency_key: "00000000-0000-4000-8000-000000000123",
+          attachments: [
+            {
+              name: "display.log",
+              media_type: "text/plain",
+              data_base64: Buffer.from("display connection lost\n").toString(
+                "base64",
+              ),
+            },
+          ],
+        }),
+      },
+    );
+    assert.equal(replied.status, 200);
+    assert.match(runtimeMessage ?? "", /display\.log/);
+    assert.match(runtimeMessage ?? "", /scratch\/attachments\//);
+
+    const attachmentDirectory = join(
+      workspaceRoot,
+      caseId,
+      "scratch",
+      "attachments",
+    );
+    const attachmentFiles = await readdir(attachmentDirectory);
+    assert.equal(attachmentFiles.length, 1);
+    const attachmentFile = join(attachmentDirectory, attachmentFiles[0]!);
+    assert.equal(await readFile(attachmentFile, "utf8"), "display connection lost\n");
+    assert.equal((await stat(attachmentFile)).mode & 0o777, 0o600);
+  } finally {
+    await app.close();
+  }
+});
+
 test("a repeated message idempotency key replays the first response without rerunning the Agent", async () => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
   temporaryDirectories.push(workspaceRoot);
@@ -1118,6 +1183,12 @@ test("user sees the non-scored Case conversation entry point", async () => {
     assert.match(html, /<form[^>]+id="case-form"/);
     assert.match(html, /id="model-picker-button"/);
     assert.match(html, /id="model-settings-button"/);
+    assert.match(html, /id="attachment-input"/);
+    const attachmentButton = html.match(
+      /<button[^>]+id="attachment-button"[^>]*>/,
+    )?.[0];
+    assert.ok(attachmentButton);
+    assert.doesNotMatch(attachmentButton, /\bdisabled\b/);
     assert.doesNotMatch(html, /id="settings-model-id"/);
 
     const created = await fetch(new URL("/api/cases", app.url), {

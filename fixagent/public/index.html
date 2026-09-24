@@ -177,11 +177,18 @@
               rows="1"
               placeholder="描述你看到的现象"
               aria-label="当前遇到了什么问题？"
-              required
             ></textarea>
+            <input
+              id="attachment-input"
+              class="visually-hidden"
+              type="file"
+              multiple
+              accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.log,.md,.json,.csv,image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,application/json,text/csv"
+            />
+            <div id="attachment-tray" class="attachment-tray" aria-label="待发送文件" hidden></div>
             <div class="composer-toolbar">
               <div class="composer-tools">
-                <button class="icon-button add-button" type="button" disabled aria-label="添加附件（暂不可用）" title="添加附件（暂不可用）">
+                <button id="attachment-button" class="icon-button add-button" type="button" aria-label="添加文件" title="添加文件">
                   <svg><use href="#icon-plus"></use></svg>
                 </button>
                 <span class="safety-note"><svg><use href="#icon-shield"></use></svg>安全停车后使用</span>

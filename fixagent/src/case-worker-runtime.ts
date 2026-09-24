@@ -30,7 +30,6 @@ export const buildCaseWorkerEnvironment = (
     CLAUDE_AGENT_SDK_CLIENT_APP: "fixagent-v0/0.1.0",
     CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS: "1",
     CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1",
-    CLAUDE_CODE_SKIP_PROMPT_HISTORY: "1",
     FIXAGENT_HOST_HOME: source.HOME,
     FIXAGENT_CASES_ROOT: dirname(caseWorkspaceRoot),
   };
