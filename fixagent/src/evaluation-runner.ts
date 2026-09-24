@@ -1,4 +1,6 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { readFile, realpath } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 
 import { z } from "zod";
 
@@ -32,6 +34,63 @@ const publishedResponseSchema = z
   })
   .passthrough();
 
+const maxEvaluationAttachmentBytes = 4 * 1024 * 1024;
+const maxEvaluationAttachmentTotalBytes = 8 * 1024 * 1024;
+
+const loadEvaluationAttachments = async ({
+  evaluationCase,
+  evaluationAssetRoot,
+}: {
+  evaluationCase: EvaluationManifest["cases"][number];
+  evaluationAssetRoot?: string;
+}) => {
+  const attachments = evaluationCase.attachments ?? [];
+  if (attachments.length === 0) return [];
+  if (!evaluationAssetRoot) throw new Error("EVALUATION_ASSET_ROOT_REQUIRED");
+
+  const assetRoot = await realpath(evaluationAssetRoot);
+  const loadedAttachments = await Promise.all(
+    attachments.map(async (attachment) => {
+      const attachmentPath = await realpath(
+        resolve(assetRoot, attachment.relative_path),
+      );
+      const pathWithinRoot = relative(assetRoot, attachmentPath);
+      if (
+        pathWithinRoot === ".." ||
+        pathWithinRoot.startsWith(`..${sep}`) ||
+        isAbsolute(pathWithinRoot)
+      ) {
+        throw new Error("EVALUATION_ATTACHMENT_OUTSIDE_ROOT");
+      }
+      const bytes = await readFile(attachmentPath);
+      if (bytes.length === 0 || bytes.length > maxEvaluationAttachmentBytes) {
+        throw new Error("EVALUATION_ATTACHMENT_SIZE_INVALID");
+      }
+      const contentHash = createHash("sha256").update(bytes).digest("hex");
+      if (contentHash !== attachment.content_hash) {
+        throw new Error("EVALUATION_ATTACHMENT_HASH_MISMATCH");
+      }
+      return {
+        byteLength: bytes.length,
+        payload: {
+          name: attachment.name,
+          media_type: attachment.media_type,
+          data_base64: bytes.toString("base64"),
+        },
+      };
+    }),
+  );
+  if (
+    loadedAttachments.reduce(
+      (total, attachment) => total + attachment.byteLength,
+      0,
+    ) > maxEvaluationAttachmentTotalBytes
+  ) {
+    throw new Error("EVALUATION_ATTACHMENT_TOTAL_SIZE_INVALID");
+  }
+  return loadedAttachments.map((attachment) => attachment.payload);
+};
+
 export interface EvaluationCaseResult {
   evaluation_case_id: string;
   case_id: string;
@@ -61,12 +120,14 @@ export const runEvaluation = async ({
   manifest: candidate,
   providerProfileId,
   evaluationCaseIds,
+  evaluationAssetRoot,
   fetchImpl = fetch,
 }: {
   baseUrl: string;
   manifest: EvaluationManifest | unknown;
   providerProfileId?: string;
   evaluationCaseIds?: string[];
+  evaluationAssetRoot?: string;
   fetchImpl?: FetchLike;
 }): Promise<EvaluationReport> => {
   const manifest = parseEvaluationManifest(candidate);
@@ -86,6 +147,10 @@ export const runEvaluation = async ({
   const endpoint = new URL(baseUrl);
   const results: EvaluationCaseResult[] = [];
   for (const evaluationCase of cases) {
+    const attachments = await loadEvaluationAttachments({
+      evaluationCase,
+      ...(evaluationAssetRoot ? { evaluationAssetRoot } : {}),
+    });
     const createResponse = await fetchImpl(new URL("/api/cases", endpoint), {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -115,6 +180,7 @@ export const runEvaluation = async ({
         body: JSON.stringify({
           message: evaluationCase.prompt,
           idempotency_key: randomUUID(),
+          ...(attachments.length > 0 ? { attachments } : {}),
         }),
       },
     );

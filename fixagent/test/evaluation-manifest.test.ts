@@ -89,3 +89,46 @@ test("evaluation manifest rejects classifications that normalize to no text", ()
     /Fault classifications must contain text/,
   );
 });
+
+test("evaluation manifest hash-locks visual attachments and rejects path traversal", () => {
+  const input = manifestInput();
+  const visualCase = {
+    ...input.cases[0]!,
+    attachments: [
+      {
+        name: "pcb1-anomaly-000.jpg",
+        media_type: "image/jpeg" as const,
+        relative_path: "assets/pcb1-anomaly-000.jpg",
+        content_hash: "c".repeat(64),
+      },
+    ],
+  };
+  const visualInput = { ...input, cases: [visualCase] };
+  const manifest = createEvaluationManifest(visualInput);
+
+  assert.equal(manifest.cases[0]?.attachments?.[0]?.media_type, "image/jpeg");
+  assert.throws(
+    () =>
+      parseEvaluationManifest({
+        ...manifest,
+        cases: [
+          {
+            ...manifest.cases[0],
+            attachments: [
+              {
+                ...manifest.cases[0]!.attachments![0],
+                relative_path: "assets/replaced.jpg",
+              },
+            ],
+          },
+        ],
+      }),
+    /EVALUATION_MANIFEST_HASH_MISMATCH/,
+  );
+
+  visualCase.attachments[0]!.relative_path = "../private-answer.jpg";
+  assert.throws(
+    () => createEvaluationManifest(visualInput),
+    /Attachment paths must stay inside the evaluation asset root/,
+  );
+});

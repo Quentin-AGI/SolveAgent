@@ -1,0 +1,30 @@
+{
+  "schema_version": "fixagent.visa-pcb-selection.v0",
+  "source_revision": "d47f019b89ca501009e65b8afd940cbd8b888642",
+  "records": [
+    { "source_id": "pcb1-anomaly-000", "pcb": "pcb1", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-001.jpg", "mask_relative_path": "ground-truth/visa-pcb-001.png", "defect_labels_en": ["Bent"], "defect_labels_zh": ["弯曲"] },
+    { "source_id": "pcb1-anomaly-015", "pcb": "pcb1", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-002.jpg", "mask_relative_path": "ground-truth/visa-pcb-002.png", "defect_labels_en": ["Melt"], "defect_labels_zh": ["熔化"] },
+    { "source_id": "pcb1-anomaly-045", "pcb": "pcb1", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-003.jpg", "mask_relative_path": "ground-truth/visa-pcb-003.png", "defect_labels_en": ["Missing"], "defect_labels_zh": ["缺件"] },
+    { "source_id": "pcb1-anomaly-090", "pcb": "pcb1", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-004.jpg", "mask_relative_path": "ground-truth/visa-pcb-004.png", "defect_labels_en": ["Scratch"], "defect_labels_zh": ["划痕"] },
+    { "source_id": "pcb1-normal-0000", "pcb": "pcb1", "condition": "NORMAL", "image_relative_path": "assets/visa-pcb-005.jpg", "defect_labels_en": [], "defect_labels_zh": [] },
+    { "source_id": "pcb2-anomaly-000", "pcb": "pcb2", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-006.jpg", "mask_relative_path": "ground-truth/visa-pcb-006.png", "defect_labels_en": ["Bent"], "defect_labels_zh": ["弯曲"] },
+    { "source_id": "pcb2-anomaly-015", "pcb": "pcb2", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-007.jpg", "mask_relative_path": "ground-truth/visa-pcb-007.png", "defect_labels_en": ["Melt"], "defect_labels_zh": ["熔化"] },
+    { "source_id": "pcb2-anomaly-045", "pcb": "pcb2", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-008.jpg", "mask_relative_path": "ground-truth/visa-pcb-008.png", "defect_labels_en": ["Missing"], "defect_labels_zh": ["缺件"] },
+    { "source_id": "pcb2-anomaly-090", "pcb": "pcb2", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-009.jpg", "mask_relative_path": "ground-truth/visa-pcb-009.png", "defect_labels_en": ["Scratch"], "defect_labels_zh": ["划痕"] },
+    { "source_id": "pcb2-normal-0000", "pcb": "pcb2", "condition": "NORMAL", "image_relative_path": "assets/visa-pcb-010.jpg", "defect_labels_en": [], "defect_labels_zh": [] },
+    { "source_id": "pcb3-anomaly-000", "pcb": "pcb3", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-011.jpg", "mask_relative_path": "ground-truth/visa-pcb-011.png", "defect_labels_en": ["Bent"], "defect_labels_zh": ["弯曲"] },
+    { "source_id": "pcb3-anomaly-030", "pcb": "pcb3", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-012.jpg", "mask_relative_path": "ground-truth/visa-pcb-012.png", "defect_labels_en": ["Melt"], "defect_labels_zh": ["熔化"] },
+    { "source_id": "pcb3-anomaly-045", "pcb": "pcb3", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-013.jpg", "mask_relative_path": "ground-truth/visa-pcb-013.png", "defect_labels_en": ["Melt", "Missing"], "defect_labels_zh": ["熔化", "缺件"] },
+    { "source_id": "pcb3-anomaly-090", "pcb": "pcb3", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-014.jpg", "mask_relative_path": "ground-truth/visa-pcb-014.png", "defect_labels_en": ["Scratch"], "defect_labels_zh": ["划痕"] },
+    { "source_id": "pcb3-normal-0000", "pcb": "pcb3", "condition": "NORMAL", "image_relative_path": "assets/visa-pcb-015.jpg", "defect_labels_en": [], "defect_labels_zh": [] },
+    { "source_id": "pcb4-anomaly-000", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-016.jpg", "mask_relative_path": "ground-truth/visa-pcb-016.png", "defect_labels_en": ["Burnt", "Scratch", "Dirt"], "defect_labels_zh": ["烧毁", "划痕", "污染"] },
+    { "source_id": "pcb4-anomaly-015", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-017.jpg", "mask_relative_path": "ground-truth/visa-pcb-017.png", "defect_labels_en": ["Damage"], "defect_labels_zh": ["损坏"] },
+    { "source_id": "pcb4-anomaly-030", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-018.jpg", "mask_relative_path": "ground-truth/visa-pcb-018.png", "defect_labels_en": ["Burnt", "Extra"], "defect_labels_zh": ["烧毁", "多余部件"] },
+    { "source_id": "pcb4-anomaly-045", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-019.jpg", "mask_relative_path": "ground-truth/visa-pcb-019.png", "defect_labels_en": ["Scratch", "Missing"], "defect_labels_zh": ["划痕", "缺件"] },
+    { "source_id": "pcb4-anomaly-060", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-020.jpg", "mask_relative_path": "ground-truth/visa-pcb-020.png", "defect_labels_en": ["Missing", "Damage"], "defect_labels_zh": ["缺件", "损坏"] },
+    { "source_id": "pcb4-anomaly-075", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-021.jpg", "mask_relative_path": "ground-truth/visa-pcb-021.png", "defect_labels_en": ["Scratch", "Dirt"], "defect_labels_zh": ["划痕", "污染"] },
+    { "source_id": "pcb4-anomaly-090", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-022.jpg", "mask_relative_path": "ground-truth/visa-pcb-022.png", "defect_labels_en": ["Wrong Place"], "defect_labels_zh": ["位置错误"] },
+    { "source_id": "pcb4-anomaly-099", "pcb": "pcb4", "condition": "ANOMALY", "image_relative_path": "assets/visa-pcb-023.jpg", "mask_relative_path": "ground-truth/visa-pcb-023.png", "defect_labels_en": ["Extra"], "defect_labels_zh": ["多余部件"] },
+    { "source_id": "pcb4-normal-0000", "pcb": "pcb4", "condition": "NORMAL", "image_relative_path": "assets/visa-pcb-024.jpg", "defect_labels_en": [], "defect_labels_zh": [] }
+  ]
+}

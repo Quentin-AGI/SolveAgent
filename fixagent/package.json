@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit",
     "architecture:check": "node --import tsx scripts/check-architecture.ts",
     "eval:convert:camb": "node --import tsx scripts/convert-camb.ts",
+    "eval:convert:visa-pcb": "node --import tsx scripts/convert-visa-pcb.ts",
     "eval:score": "node --import tsx scripts/score-evaluation.ts",
     "eval:run": "node --import tsx scripts/run-evaluation.ts",
     "knowledge:import:raft": "node --import tsx scripts/import-raft-trajectories.ts"

@@ -60,6 +60,45 @@ pnpm eval:run \
 The runner sends only each prompt and public evaluation Case ID to the server.
 Expected answers remain in the runner process and are never copied into a Case.
 
+## VisA PCB visual troubleshooting baseline
+
+The `visa-pcb` suite contains 24 CC-BY-4.0 VisA cases: 20 anomalous
+boards covering every PCB defect class represented by the selected masks, plus
+four normal boards used to measure false-positive diagnoses. Images were
+retrieved from the pinned `imaadd05/visa-anomaly-detection` mirror revision
+recorded in `selection.private.json`; the authoritative dataset and license are
+maintained by Amazon Science at https://github.com/amazon-science/spot-diff.
+
+Regenerate the hash-locked manifest and runtime snapshot with:
+
+```sh
+FIXAGENT_EVAL_IMPORTED_AT=2026-09-24T00:00:00.000Z \
+  pnpm eval:convert:visa-pcb \
+  evaluation/visa-pcb/selection.private.json \
+  evaluation/visa-pcb
+```
+
+Run FixAgent against the generated snapshot, using a provider profile whose
+model and endpoint genuinely support image input:
+
+```sh
+FIXAGENT_KNOWLEDGE_SNAPSHOT_FILE=evaluation/visa-pcb/knowledge-snapshot.json \
+  pnpm dev
+
+pnpm eval:run \
+  http://127.0.0.1:4174 \
+  evaluation/visa-pcb/evaluation-manifest.private.json \
+  evaluation/visa-pcb/report.json \
+  vision-provider-profile-id
+```
+
+Every image is re-hashed before upload. The private selection, masks, and
+expected labels are denied to Case workers along with the rest of the
+evaluation root. This suite tests visible anomaly classification and safe next
+steps; it does not prove an electrical root cause or a successful physical
+repair. The first deterministic score remains keyword-based, so localization
+and explanation quality should also be reviewed manually.
+
 ## RAFT historical Case import
 
 Export RAFT trajectories as JSONL using the normalized contract in

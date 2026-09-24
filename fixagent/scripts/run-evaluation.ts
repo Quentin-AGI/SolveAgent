@@ -1,5 +1,5 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 
 import { runEvaluation } from "../src/evaluation-runner.js";
 
@@ -11,12 +11,12 @@ if (!baseUrl || !manifestArgument || !outputArgument) {
   );
 }
 
-const manifest = JSON.parse(
-  await readFile(resolve(manifestArgument), "utf8"),
-) as unknown;
+const manifestPath = resolve(manifestArgument);
+const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as unknown;
 const report = await runEvaluation({
   baseUrl,
   manifest,
+  evaluationAssetRoot: dirname(manifestPath),
   ...(providerProfileId ? { providerProfileId } : {}),
 });
 await writeFile(

@@ -28,6 +28,33 @@ const identifierSchema = z
     "Identifiers cannot have surrounding whitespace",
   );
 
+const evaluationAttachmentSchema = z
+  .object({
+    name: z.string().trim().min(1).max(180),
+    media_type: z.enum([
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "image/webp",
+    ]),
+    relative_path: z
+      .string()
+      .trim()
+      .min(1)
+      .max(240)
+      .refine(
+        (value) =>
+          !value.startsWith("/") &&
+          !value.includes("\\") &&
+          value
+            .split("/")
+            .every((segment) => segment && segment !== "." && segment !== ".."),
+        "Attachment paths must stay inside the evaluation asset root",
+      ),
+    content_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+
 const evaluationManifestWithoutHashSchema = z
   .object({
     schema_version: z.literal("fixagent.evaluation-manifest.v0"),
@@ -61,6 +88,11 @@ const evaluationManifestWithoutHashSchema = z
                 content_hash: z.string().regex(/^[a-f0-9]{64}$/),
               })
               .strict(),
+            attachments: z
+              .array(evaluationAttachmentSchema)
+              .min(1)
+              .max(4)
+              .optional(),
             prompt: z.string().trim().min(1),
             expected: z
               .object({

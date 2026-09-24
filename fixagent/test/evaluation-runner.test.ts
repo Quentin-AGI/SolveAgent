@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 import { createEvaluationManifest } from "../src/evaluation-manifest.js";
@@ -178,5 +182,102 @@ test("evaluation runner can select a bounded subset", async () => {
   assert.deepEqual(
     report.results.map((result) => result.evaluation_case_id),
     ["EVAL-2"],
+  );
+});
+
+test("evaluation runner verifies and sends visual attachments", async () => {
+  const assetRoot = await mkdtemp(join(tmpdir(), "fixagent-eval-assets-"));
+  const imageBytes = Buffer.from("fixture-image");
+  await writeFile(join(assetRoot, "fixture.jpg"), imageBytes);
+  const manifest = createEvaluationManifest({
+    benchmark_id: "VISUAL-BENCHMARK",
+    created_at: "2026-09-24T00:00:00.000Z",
+    source: {
+      name: "fixture",
+      uri: "https://example.com/fixture",
+      license: "CC-BY-4.0",
+      content_hash: "a".repeat(64),
+    },
+    approval: {
+      status: "EVAL_APPROVED",
+      approved_by: "owner",
+      approved_at: "2026-09-24T00:00:00.000Z",
+      authority: "EVALUATION_DATA_OWNER",
+    },
+    cases: [
+      {
+        evaluation_case_id: "VISUAL-1",
+        target_issue_id: "VISUAL-SOURCE-1",
+        runtime_snapshot: {
+          snapshot_id: "VISUAL-SNAPSHOT-1",
+          content_hash: "b".repeat(64),
+        },
+        prompt: "请检查电路板照片。",
+        attachments: [
+          {
+            name: "fixture.jpg",
+            media_type: "image/jpeg",
+            relative_path: "fixture.jpg",
+            content_hash: createHash("sha256").update(imageBytes).digest("hex"),
+          },
+        ],
+        expected: {
+          standard_answer: "发现划痕并停止使用",
+          fault_classifications: ["划痕"],
+          allowed_steps: ["停止使用"],
+        },
+        rubric: { type: "ALLOWED_STEP_COVERAGE", pass_threshold: 1 },
+      },
+    ],
+  });
+  const requests: unknown[] = [];
+
+  await runEvaluation({
+    baseUrl: "http://127.0.0.1:4174",
+    manifest,
+    evaluationAssetRoot: assetRoot,
+    async fetchImpl(input, init) {
+      const url = new URL(
+        typeof input === "string" || input instanceof URL ? input : input.url,
+      );
+      requests.push(init?.body ? JSON.parse(String(init.body)) : null);
+      if (url.pathname === "/api/cases") {
+        return Response.json(
+          {
+            case_id: "case-visual",
+            knowledge_snapshot_id: "VISUAL-SNAPSHOT-1",
+            knowledge_snapshot_hash: "b".repeat(64),
+          },
+          { status: 201 },
+        );
+      }
+      return Response.json({
+        response: { message_markdown: "发现划痕，请停止使用并人工复检。" },
+      });
+    },
+  });
+
+  assert.deepEqual(
+    (requests[1] as { attachments: unknown[] }).attachments,
+    [
+      {
+        name: "fixture.jpg",
+        media_type: "image/jpeg",
+        data_base64: imageBytes.toString("base64"),
+      },
+    ],
+  );
+
+  await writeFile(join(assetRoot, "fixture.jpg"), "tampered");
+  await assert.rejects(
+    runEvaluation({
+      baseUrl: "http://127.0.0.1:4174",
+      manifest,
+      evaluationAssetRoot: assetRoot,
+      async fetchImpl() {
+        throw new Error("should not send a tampered attachment");
+      },
+    }),
+    /EVALUATION_ATTACHMENT_HASH_MISMATCH/,
   );
 });
