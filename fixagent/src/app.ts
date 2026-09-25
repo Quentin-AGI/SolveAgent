@@ -162,6 +162,7 @@ const defaultSkillFile = fileURLToPath(
 const publicFiles = new Map([
   ["/", { name: "index.html", type: "text/html; charset=utf-8" }],
   ["/app.js", { name: "app.js", type: "text/javascript; charset=utf-8" }],
+  ["/client-id.js", { name: "client-id.js", type: "text/javascript; charset=utf-8" }],
   ["/styles.css", { name: "styles.css", type: "text/css; charset=utf-8" }],
 ]);
 

@@ -1,3 +1,5 @@
+import { createClientUuid } from "/client-id.js";
+
 const appShell = document.querySelector(".app-shell");
 const sidebar = document.querySelector("#sidebar");
 const workspace = document.querySelector(".workspace");
@@ -932,7 +934,7 @@ form.addEventListener("submit", async (event) => {
   clearPendingAttachments();
   resizeInput();
   const progressView = appendAnalysisProgress();
-  const turnId = crypto.randomUUID();
+  const turnId = createClientUuid();
   let stopProgressPolling = async () => {};
 
   try {
