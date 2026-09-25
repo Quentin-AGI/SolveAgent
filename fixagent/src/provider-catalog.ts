@@ -4,9 +4,9 @@ export const knownProviderCatalog = [
     display_name: "通义千问",
     provider_label: "阿里云百炼",
     provider_id: "qwen",
-    runtime_model_id: "qwen3.7-max",
+    runtime_model_id: "qwen3.8-flash",
     credential_type: "ANTHROPIC_AUTH_TOKEN",
-    capabilities: ["tools"],
+    capabilities: ["tools", "vision"],
   },
   {
     id: "kimi",

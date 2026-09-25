@@ -17,6 +17,7 @@ test("Case Worker receives only the provider profile and required process enviro
       RANDOM_SERVER_SECRET: "must-not-cross-boundary",
     },
     "/cases/case-123",
+    { afterSalesDataFile: "/private/eufy-after-sales.json" },
   );
 
   assert.equal(environment.ANTHROPIC_BASE_URL, "https://provider.example/anthropic");
@@ -28,6 +29,10 @@ test("Case Worker receives only the provider profile and required process enviro
   assert.equal(environment.FIXAGENT_HOST_HOME, "/host-home");
   assert.equal(environment.FIXAGENT_CASES_ROOT, "/cases");
   assert.match(environment.FIXAGENT_EVALUATION_ROOT ?? "", /\/evaluation$/u);
+  assert.equal(
+    environment.FIXAGENT_AFTER_SALES_DATA_FILE,
+    "/private/eufy-after-sales.json",
+  );
   assert.equal(environment.DATABASE_URL, undefined);
   assert.equal(environment.RANDOM_SERVER_SECRET, undefined);
   assert.equal(environment.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, "1");

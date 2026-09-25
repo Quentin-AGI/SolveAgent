@@ -568,6 +568,97 @@ button.nav-item:hover {
   color: #9f3a38;
 }
 
+.analysis-progress {
+  width: min(680px, 100%);
+}
+
+.analysis-progress details {
+  overflow: hidden;
+  border: 1px solid #e1e1de;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.analysis-progress summary {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  color: #303134;
+  cursor: pointer;
+  list-style: none;
+}
+
+.analysis-progress summary::-webkit-details-marker {
+  display: none;
+}
+
+.analysis-progress summary strong {
+  font-size: 13px;
+  font-weight: 620;
+}
+
+.analysis-progress-state {
+  margin-left: auto;
+  color: #6f7276;
+  font-size: 11px;
+}
+
+.analysis-progress.has-error .analysis-progress-state {
+  color: #a53f3b;
+}
+
+.analysis-progress-list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0 13px 10px 39px;
+  list-style: none;
+}
+
+.analysis-progress-list li {
+  position: relative;
+  display: grid;
+  min-height: 27px;
+  align-content: center;
+  gap: 1px;
+  border-left: 1px solid #e2e2df;
+  padding: 3px 0 3px 15px;
+  color: #52555a;
+  font-size: 12px;
+}
+
+.analysis-progress-list li::before {
+  position: absolute;
+  top: 10px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border: 1px solid #fff;
+  border-radius: 50%;
+  background: #b6b8bb;
+  content: "";
+}
+
+.analysis-progress-list li.is-completed::before {
+  background: #2d9a67;
+}
+
+.analysis-progress-list li.is-running::before {
+  background: #cf8a1d;
+}
+
+.analysis-progress-list li.is-error::before {
+  background: #c04a45;
+}
+
+.analysis-progress-list small {
+  overflow-wrap: anywhere;
+  color: #85888c;
+  font-size: 10px;
+}
+
 .thinking-dots {
   display: flex;
   height: 22px;

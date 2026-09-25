@@ -26,6 +26,13 @@ const validInitMessage = {
     "mcp__fixagent__search_historical_cases",
     "mcp__fixagent__get_action_policy",
     "mcp__fixagent__get_case_state",
+    "mcp__fixagent__resolve_product_identity",
+    "mcp__fixagent__record_complaint_evidence",
+    "mcp__fixagent__get_masked_order",
+    "mcp__fixagent__determine_warranty_status",
+    "mcp__fixagent__verify_authorized_dealer",
+    "mcp__fixagent__create_after_sales_draft",
+    "mcp__fixagent__request_human_confirmation",
     "mcp__fixagent__publish_case_response",
   ],
   mcp_servers: [{ name: "fixagent", status: "connected", source: "sdk" }],
@@ -65,7 +72,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
   await runtime.run({
     caseId: "case-123",
     cwd: "/isolated/cases/case-123",
-    userMessage: "屏幕右边有黑边",
+    userMessage: "扫地机器人无法回到基站",
     async publish() {},
     async trace() {},
     async saveSession(sessionId) {
@@ -74,7 +81,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
   });
 
   assert.ok(captured);
-  assert.equal(captured.prompt, "屏幕右边有黑边");
+  assert.equal(captured.prompt, "扫地机器人无法回到基站");
   assert.equal(captured.options?.cwd, "/isolated/cases/case-123");
   assert.deepEqual(captured.options?.settingSources, ["project"]);
   assert.deepEqual(captured.options?.skills, ["hardware-troubleshooting"]);
@@ -107,6 +114,7 @@ test("Case runs through Claude Agent SDK with native tools, Skill, and FixAgent 
     { name: "ANTHROPIC_AUTH_TOKEN", mode: "deny" },
   ]);
   assert.equal(captured.options?.env?.CLAUDE_CODE_SUBPROCESS_ENV_SCRUB, "1");
+  assert.equal(captured.options?.env?.CLAUDE_CODE_MAX_RETRIES, "2");
   assert.equal(captured.options?.env?.CLAUDE_CODE_SKIP_PROMPT_HISTORY, undefined);
   assert.equal(captured.options?.env?.CLAUDE_AGENT_SDK_DISABLE_BUILTIN_AGENTS, "1");
   assert.equal(captured.options?.env?.npm_config_registry, undefined);
@@ -185,7 +193,7 @@ test("diagnostic questions never use the plain-text fallback", async () => {
   await runtime.run({
     caseId: "case-123",
     cwd: "/isolated/cases/case-123",
-    userMessage: "帮助我修复车辆屏幕",
+    userMessage: "帮助我修复扫地机器人",
     async publish(candidate) {
       published = candidate;
     },
@@ -194,6 +202,37 @@ test("diagnostic questions never use the plain-text fallback", async () => {
   });
 
   assert.equal(published, undefined);
+});
+
+test("provider authentication failures surface as a stable domain error", async () => {
+  const runtime = createClaudeAgentRuntime({
+    knowledgeSnapshot: EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT,
+    environment: {},
+    queryAgent() {
+      return (async function* (): AsyncGenerator<SDKMessage> {
+        yield validInitMessage;
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: true,
+          api_error_status: 401,
+          result: "Invalid API key",
+        } as SDKMessage;
+      })();
+    },
+  });
+
+  await assert.rejects(
+    runtime.run({
+      caseId: "case-123",
+      cwd: "/isolated/cases/case-123",
+      userMessage: "请分析图片",
+      async publish() {},
+      async trace() {},
+      async saveSession() {},
+    }),
+    /PROVIDER_AUTHENTICATION_FAILED/,
+  );
 });
 
 test("Case is rejected when SDK init cannot prove the core Skill is available", async () => {

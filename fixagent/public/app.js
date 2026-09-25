@@ -58,6 +58,7 @@ let pendingAttachments = [];
 const maxAttachmentCount = 4;
 const maxAttachmentBytes = 4 * 1024 * 1024;
 const maxAttachmentTotalBytes = 8 * 1024 * 1024;
+const maxSourceVideoBytes = 32 * 1024 * 1024;
 const supportedAttachmentTypes = new Set([
   "image/jpeg",
   "image/png",
@@ -68,6 +69,9 @@ const supportedAttachmentTypes = new Set([
   "text/plain",
   "text/markdown",
   "text/csv",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
 ]);
 const attachmentTypeByExtension = {
   jpg: "image/jpeg",
@@ -81,10 +85,13 @@ const attachmentTypeByExtension = {
   log: "text/plain",
   md: "text/markdown",
   csv: "text/csv",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
 };
 
 const providerDefaultApiUrls = {
-  qwen: "https://dashscope.aliyuncs.com/apps/anthropic",
+  qwen: "https://token-plan.maas.qianwenaiapi.com/apps/anthropic",
   kimi: "https://api.moonshot.cn/anthropic",
   zhipu: "https://open.bigmodel.cn/api/anthropic",
   deepseek: "https://api.deepseek.com/anthropic",
@@ -148,22 +155,98 @@ function appendMessage(role, text, options = {}) {
   return article;
 }
 
-function appendThinking() {
+function appendAnalysisProgress() {
   messages.querySelector(".empty-state")?.remove();
   messages.classList.remove("is-empty");
 
   const article = document.createElement("article");
-  article.className = "message agent thinking";
+  article.className = "message agent analysis-progress";
   article.setAttribute("aria-label", "FixAgent 正在分析");
 
-  const content = document.createElement("div");
-  content.className = "message-content";
-  content.innerHTML =
-    '<div class="thinking-dots" aria-hidden="true"><span></span><span></span><span></span></div>';
-  article.append(content);
+  const details = document.createElement("details");
+  details.open = true;
+  const summary = document.createElement("summary");
+  const dots = document.createElement("span");
+  dots.className = "thinking-dots";
+  dots.setAttribute("aria-hidden", "true");
+  dots.append(document.createElement("span"), document.createElement("span"), document.createElement("span"));
+  const title = document.createElement("strong");
+  title.textContent = "分析过程";
+  const state = document.createElement("span");
+  state.className = "analysis-progress-state";
+  state.textContent = "准备中";
+  summary.append(dots, title, state);
+
+  const list = document.createElement("ol");
+  list.className = "analysis-progress-list";
+  const placeholder = document.createElement("li");
+  placeholder.className = "is-running";
+  placeholder.textContent = "准备分析请求";
+  list.append(placeholder);
+  details.append(summary, list);
+  article.append(details);
   messages.append(article);
   scrollToLatest();
-  return article;
+
+  return {
+    article,
+    render(events) {
+      if (!Array.isArray(events) || events.length === 0) return;
+      list.replaceChildren();
+      for (const event of events) {
+        const item = document.createElement("li");
+        item.className = `is-${event.status}`;
+        const label = document.createElement("span");
+        label.textContent = event.label;
+        item.append(label);
+        if (event.detail) {
+          const detail = document.createElement("small");
+          detail.textContent = event.detail;
+          item.append(detail);
+        }
+        list.append(item);
+      }
+      const last = events.at(-1);
+      state.textContent =
+        last?.status === "error"
+          ? "失败"
+          : last?.status === "completed" && last?.stage === "turn_completed"
+            ? "完成"
+            : "进行中";
+      article.classList.toggle("has-error", last?.status === "error");
+      scrollToLatest();
+    },
+    finish(hasError = false) {
+      article.classList.toggle("has-error", hasError);
+      state.textContent = hasError ? "失败" : "完成";
+      dots.hidden = true;
+    },
+  };
+}
+
+function startProgressPolling(activeCaseId, turnId, view) {
+  let stopped = false;
+  let timeout;
+
+  const poll = async () => {
+    try {
+      const progress = await requestJson(
+        `/api/cases/${activeCaseId}/progress?turn_id=${encodeURIComponent(turnId)}`,
+      );
+      view.render(progress.events);
+    } catch {
+      // The message request owns the user-visible error; progress polling is best-effort.
+    }
+    if (!stopped) timeout = window.setTimeout(poll, 650);
+  };
+
+  void poll();
+  return async () => {
+    if (stopped) return;
+    stopped = true;
+    window.clearTimeout(timeout);
+    await poll();
+  };
 }
 
 function scrollToLatest() {
@@ -315,13 +398,83 @@ function readAttachment(file, mediaType) {
   });
 }
 
+function waitForVideoEvent(video, eventName) {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      video.removeEventListener(eventName, handleEvent);
+      video.removeEventListener("error", handleError);
+    };
+    const handleEvent = () => {
+      cleanup();
+      resolve();
+    };
+    const handleError = () => {
+      cleanup();
+      reject(new Error("VIDEO_DECODE_FAILED"));
+    };
+    video.addEventListener(eventName, handleEvent, { once: true });
+    video.addEventListener("error", handleError, { once: true });
+  });
+}
+
+async function extractVideoKeyframes(file) {
+  const objectUrl = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.preload = "metadata";
+  video.src = objectUrl;
+
+  try {
+    await waitForVideoEvent(video, "loadedmetadata");
+    if (!Number.isFinite(video.duration) || video.duration <= 0) {
+      throw new Error("VIDEO_DURATION_INVALID");
+    }
+    const times = [0.1, 0.5, 0.9].map((ratio) =>
+      Math.min(Math.max(video.duration * ratio, 0), video.duration - 0.01),
+    );
+    const longestEdge = 1280;
+    const scale = Math.min(
+      1,
+      longestEdge / Math.max(video.videoWidth, video.videoHeight),
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("VIDEO_CANVAS_UNAVAILABLE");
+    const baseName = file.name.replace(/\.[^.]+$/u, "");
+    const frames = [];
+
+    for (let index = 0; index < times.length; index += 1) {
+      const seeked = waitForVideoEvent(video, "seeked");
+      video.currentTime = times[index];
+      await seeked;
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve, reject) =>
+        canvas.toBlob(
+          (candidate) =>
+            candidate ? resolve(candidate) : reject(new Error("VIDEO_FRAME_FAILED")),
+          "image/jpeg",
+          0.82,
+        ),
+      );
+      const frame = new File(
+        [blob],
+        `${baseName}-frame-${index + 1}.jpg`,
+        { type: "image/jpeg" },
+      );
+      frames.push(await readAttachment(frame, "image/jpeg"));
+    }
+    return frames;
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
 async function addAttachments(fileList) {
   const files = [...fileList];
-  if (pendingAttachments.length + files.length > maxAttachmentCount) {
-    window.alert(`每次最多添加 ${maxAttachmentCount} 个文件。`);
-    return;
-  }
-
   const selected = [];
   for (const file of files) {
     const mediaType = attachmentMediaType(file);
@@ -329,31 +482,47 @@ async function addAttachments(fileList) {
       window.alert(`不支持文件“${file.name}”。`);
       return;
     }
-    if (!file.size || file.size > maxAttachmentBytes) {
-      window.alert(`文件“${file.name}”必须小于 4 MB。`);
+    const isVideo = mediaType.startsWith("video/");
+    const sizeLimit = isVideo ? maxSourceVideoBytes : maxAttachmentBytes;
+    if (!file.size || file.size > sizeLimit) {
+      window.alert(
+        isVideo
+          ? `视频“${file.name}”必须小于 32 MB。`
+          : `文件“${file.name}”必须小于 4 MB。`,
+      );
       return;
     }
-    selected.push({ file, mediaType });
-  }
-
-  const totalBytes = [...pendingAttachments, ...files].reduce(
-    (sum, item) => sum + item.size,
-    0,
-  );
-  if (totalBytes > maxAttachmentTotalBytes) {
-    window.alert("文件总大小不能超过 8 MB。");
-    return;
+    selected.push({ file, mediaType, isVideo });
   }
 
   try {
-    const attachments = await Promise.all(
-      selected.map(({ file, mediaType }) => readAttachment(file, mediaType)),
+    const converted = await Promise.all(
+      selected.map(({ file, mediaType, isVideo }) =>
+        isVideo
+          ? extractVideoKeyframes(file)
+          : readAttachment(file, mediaType).then((attachment) => [attachment]),
+      ),
     );
+    const attachments = converted.flat();
+    if (pendingAttachments.length + attachments.length > maxAttachmentCount) {
+      window.alert(
+        `每次最多发送 ${maxAttachmentCount} 个附件；每段视频会生成 3 张关键帧。`,
+      );
+      return;
+    }
+    const totalBytes = [...pendingAttachments, ...attachments].reduce(
+      (sum, item) => sum + item.size,
+      0,
+    );
+    if (totalBytes > maxAttachmentTotalBytes) {
+      window.alert("转换后的附件总大小不能超过 8 MB。");
+      return;
+    }
     pendingAttachments.push(...attachments);
     renderAttachmentTray();
     syncModelPickerState();
   } catch {
-    window.alert("文件读取失败，请重新选择。");
+    window.alert("文件或视频关键帧读取失败，请重新选择。");
   }
 }
 
@@ -762,7 +931,9 @@ form.addEventListener("submit", async (event) => {
   input.value = "";
   clearPendingAttachments();
   resizeInput();
-  const thinking = appendThinking();
+  const progressView = appendAnalysisProgress();
+  const turnId = crypto.randomUUID();
+  let stopProgressPolling = async () => {};
 
   try {
     if (!caseId) {
@@ -779,12 +950,14 @@ form.addEventListener("submit", async (event) => {
       saveCurrentCase(caseTitle);
     }
 
+    stopProgressPolling = startProgressPolling(caseId, turnId, progressView);
+
     const result = await requestJson(`/api/cases/${caseId}/messages`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         message,
-        idempotency_key: crypto.randomUUID(),
+        idempotency_key: turnId,
         attachments: attachments.map(
           ({ name, media_type, data_base64 }) => ({
             name,
@@ -795,7 +968,8 @@ form.addEventListener("submit", async (event) => {
       }),
     });
 
-    thinking.remove();
+    await stopProgressPolling();
+    progressView.finish(false);
     appendMessage("agent", result.response.message_markdown);
     status.textContent = result.handoff
       ? result.handoff.status === "PERSISTENCE_FAILED"
@@ -805,10 +979,19 @@ form.addEventListener("submit", async (event) => {
     setServiceState("available");
     saveCurrentCase(caseTitle);
   } catch (error) {
-    thinking.remove();
+    await stopProgressPolling();
+    progressView.finish(true);
     const errorMessage =
-      error instanceof Error &&
-      ["INVALID_REQUEST", "REQUEST_TOO_LARGE"].includes(error.message)
+      error instanceof Error && error.message === "PROVIDER_AUTHENTICATION_FAILED"
+        ? "API Key 无效或与当前 API 地址不匹配，请在左下角模型设置中重新配置。"
+        : error instanceof Error && error.message === "PROVIDER_ACCESS_DENIED"
+          ? "当前 API Key 没有调用该模型的权限，请检查套餐或模型授权。"
+          : error instanceof Error && error.message === "PROVIDER_REQUEST_REJECTED"
+            ? "供应商拒绝了模型请求，请检查 API 地址和模型配置。"
+            : error instanceof Error && error.message === "PROVIDER_RATE_LIMITED"
+              ? "模型调用频率或额度已达上限，请稍后重试。"
+              : error instanceof Error &&
+                  ["INVALID_REQUEST", "REQUEST_TOO_LARGE"].includes(error.message)
         ? "文件或消息不符合上传要求，请检查后重试。"
         : error instanceof Error &&
             error.message === "AGENT_RESPONSE_NOT_PUBLISHED"

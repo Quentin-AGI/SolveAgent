@@ -166,7 +166,7 @@ test("Knowledge Snapshot enforces approval mode and source cutoff", () => {
   const action = unsafeAction.action_cards[0];
   assert.ok(action);
   action.prerequisite_evidence_refs = [];
-  assert.throws(() => createKnowledgeSnapshot(unsafeAction), /safely parked/);
+  assert.throws(() => createKnowledgeSnapshot(unsafeAction), /safe state/);
 
   const customer = fixtureInput();
   customer.mode = "CUSTOMER";
@@ -595,6 +595,39 @@ test("publication accepts exact applicable references and rejects stale or inapp
         evidenceRefs: [VEHICLE_SAFELY_PARKED_EVIDENCE_REF],
       }),
     /FROZEN_KNOWLEDGE_SNAPSHOT_HASH_MISMATCH/,
+  );
+});
+
+test("publication accepts only Case-issued deterministic evidence references", () => {
+  const snapshot = createKnowledgeSnapshot(fixtureInput());
+  const candidate = {
+    message_markdown: "该订单当前处于质保期内。",
+    claim_refs: [],
+    evidence_refs: ["order:0123456789abcdef"],
+    action_card_refs: [],
+    response_type: "INFORMATION",
+  };
+
+  assert.deepEqual(
+    validatePublishedCaseResponse({
+      candidate,
+      snapshot,
+      caseKnowledgeSnapshotId: snapshot.snapshot_id,
+      caseKnowledgeSnapshotHash: snapshot.content_hash,
+      evidenceRefs: ["order:0123456789abcdef"],
+    }),
+    candidate,
+  );
+  assert.throws(
+    () =>
+      validatePublishedCaseResponse({
+        candidate,
+        snapshot,
+        caseKnowledgeSnapshotId: snapshot.snapshot_id,
+        caseKnowledgeSnapshotHash: snapshot.content_hash,
+        evidenceRefs: [],
+      }),
+    /CASE_EVIDENCE_REFERENCE_NOT_AVAILABLE/,
   );
 });
 

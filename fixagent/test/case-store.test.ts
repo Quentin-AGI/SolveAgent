@@ -48,7 +48,7 @@ test("Case event writes are revision-checked, idempotent, and rebuildable", asyn
     providerId: "qwen",
     modelId: "qwen-model",
     providerProfileHash: hashCaseRequest({ provider: "qwen" }),
-    knowledgeSnapshotId: "EMPTY_EVAL_V0",
+    knowledgeSnapshotId: "EMPTY_EUFY_EVAL_V0",
     knowledgeSnapshotHash: "b".repeat(64),
   });
   assert.equal(initial.state_revision, 0);
@@ -162,7 +162,7 @@ test("a stale Worker cannot write after its Lease fencing token changes", async 
     providerId: "qwen",
     modelId: "qwen-model",
     providerProfileHash: hashCaseRequest({ provider: "qwen" }),
-    knowledgeSnapshotId: "EMPTY_EVAL_V0",
+    knowledgeSnapshotId: "EMPTY_EUFY_EVAL_V0",
     knowledgeSnapshotHash: "b".repeat(64),
   });
   const lease = await acquireCaseWorkerLease(caseWorkspaceRoot, caseId);

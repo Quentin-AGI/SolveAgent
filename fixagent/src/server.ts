@@ -19,6 +19,8 @@ const workspaceRoot = resolve(
 );
 const configuredKnowledgeSnapshotFile =
   process.env.FIXAGENT_KNOWLEDGE_SNAPSHOT_FILE;
+const configuredAfterSalesDataFile =
+  process.env.FIXAGENT_AFTER_SALES_DATA_FILE;
 const knowledgeSnapshot = configuredKnowledgeSnapshotFile
   ? await loadKnowledgeSnapshotFile(resolve(configuredKnowledgeSnapshotFile))
   : EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT;
@@ -36,7 +38,11 @@ const providerRegistryEditor = createProviderRegistryEditor(
 );
 
 const app = createFixAgentServer({
-  runtime: createCaseWorkerRuntime(),
+  runtime: createCaseWorkerRuntime({
+    ...(configuredAfterSalesDataFile
+      ? { afterSalesDataFile: resolve(configuredAfterSalesDataFile) }
+      : {}),
+  }),
   workspaceRoot,
   knowledgeSnapshot,
   ...(providerRegistry ?? {}),

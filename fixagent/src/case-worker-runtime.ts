@@ -22,6 +22,7 @@ const evaluationRoot = resolve(
 export const buildCaseWorkerEnvironment = (
   source: NodeJS.ProcessEnv,
   agentCwd: string,
+  { afterSalesDataFile }: { afterSalesDataFile?: string } = {},
 ): NodeJS.ProcessEnv => {
   const caseWorkspaceRoot = agentCwd;
   const environment: NodeJS.ProcessEnv = {
@@ -38,6 +39,7 @@ export const buildCaseWorkerEnvironment = (
     FIXAGENT_HOST_HOME: source.HOME,
     FIXAGENT_CASES_ROOT: dirname(caseWorkspaceRoot),
     FIXAGENT_EVALUATION_ROOT: evaluationRoot,
+    FIXAGENT_AFTER_SALES_DATA_FILE: afterSalesDataFile,
   };
 
   for (const key of providerRuntimeEnvironmentKeys) {
@@ -76,7 +78,11 @@ const send = (worker: ChildProcess, message: unknown): Promise<void> =>
  * Each invocation creates a new OS process dedicated to exactly one Case.
  * It is deliberately short-lived until same-Case Session resume and Leases land.
  */
-export const createCaseWorkerRuntime = (): AgentRuntime => ({
+export const createCaseWorkerRuntime = ({
+  afterSalesDataFile,
+}: {
+  afterSalesDataFile?: string;
+} = {}): AgentRuntime => ({
   async run(request: AgentRunRequest) {
     const worker = fork(workerEntry, [], {
       cwd: request.cwd,
@@ -84,6 +90,7 @@ export const createCaseWorkerRuntime = (): AgentRuntime => ({
         ...buildCaseWorkerEnvironment(
           request.providerEnvironment ?? process.env,
           request.cwd,
+          afterSalesDataFile ? { afterSalesDataFile } : {},
         ),
         FIXAGENT_CASE_ID: request.caseId,
       },

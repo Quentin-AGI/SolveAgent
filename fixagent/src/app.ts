@@ -16,6 +16,7 @@ import { fileURLToPath } from "node:url";
 
 import { z } from "zod";
 
+import { loadIssuedAfterSalesEvidenceRefs } from "./after-sales.js";
 import {
   acquireCaseWorkerLease,
   commitCaseEvent,
@@ -440,6 +441,160 @@ const appendCaseTrace = async ({
   }
 };
 
+const caseProgressEventSchema = z
+  .object({
+    turn_id: z.string().uuid(),
+    occurred_at: z.string().datetime(),
+    stage: z.string().regex(/^[a-z0-9_]+$/),
+    status: z.enum(["running", "completed", "error"]),
+    label: z.string().min(1).max(120),
+    detail: z.string().min(1).max(240).optional(),
+  })
+  .strict();
+
+type CaseProgressEvent = z.infer<typeof caseProgressEventSchema>;
+
+const appendCaseProgress = async ({
+  caseWorkspaceRoot,
+  event,
+}: {
+  caseWorkspaceRoot: string;
+  event: CaseProgressEvent;
+}): Promise<void> => {
+  const parsed = caseProgressEventSchema.parse(event);
+  await appendFile(
+    join(caseWorkspaceRoot, "trace", "progress.jsonl"),
+    `${JSON.stringify(parsed)}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
+};
+
+const readCaseProgress = async (
+  caseWorkspaceRoot: string,
+  turnId: string,
+): Promise<CaseProgressEvent[]> => {
+  try {
+    const content = await readFile(
+      join(caseWorkspaceRoot, "trace", "progress.jsonl"),
+      "utf8",
+    );
+    return content
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => caseProgressEventSchema.parse(JSON.parse(line)))
+      .filter((event) => event.turn_id === turnId)
+      .slice(-32);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+};
+
+const recordValue = (value: unknown): Record<string, unknown> | undefined =>
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : undefined;
+
+const summarizeRuntimeProgress = (
+  event: unknown,
+): Omit<CaseProgressEvent, "turn_id" | "occurred_at"> | undefined => {
+  const root = recordValue(event);
+  if (!root) return undefined;
+
+  if (root.type === "system" && root.subtype === "init") {
+    return {
+      stage: "model_connected",
+      status: "completed",
+      label: "模型会话已建立",
+      ...(typeof root.model === "string" ? { detail: root.model } : {}),
+    };
+  }
+  if (root.type === "system" && root.subtype === "api_retry") {
+    const attempt = typeof root.attempt === "number" ? root.attempt : 1;
+    const maxRetries =
+      typeof root.max_retries === "number" ? root.max_retries : "?";
+    const errorStatus =
+      typeof root.error_status === "number" ? `HTTP ${root.error_status}` : undefined;
+    return {
+      stage: "provider_retry",
+      status: "running",
+      label: `供应商请求重试 ${attempt}/${maxRetries}`,
+      ...(errorStatus ? { detail: errorStatus } : {}),
+    };
+  }
+  if (root.type === "result" && root.subtype === "success") {
+    const status = typeof root.api_error_status === "number" ? root.api_error_status : undefined;
+    if (root.is_error === true) {
+      return {
+        stage: "provider_error",
+        status: "error",
+        label:
+          status === 401
+            ? "供应商认证失败"
+            : status === 403
+              ? "供应商拒绝访问"
+              : status === 429
+                ? "供应商额度或频率受限"
+                : "供应商请求失败",
+        ...(status ? { detail: `HTTP ${status}` } : {}),
+      };
+    }
+    return {
+      stage: "model_completed",
+      status: "completed",
+      label: "模型分析完成",
+    };
+  }
+
+  const message = recordValue(root.message);
+  const content = Array.isArray(message?.content) ? message.content : [];
+  for (const item of content) {
+    const block = recordValue(item);
+    if (!block) continue;
+    if (block.type === "tool_use" && typeof block.name === "string") {
+      const toolLabels: Record<string, [string, string]> = {
+        Read: ["attachment_read", "读取附件"],
+        Bash: ["sandbox_analysis", "运行受限分析工具"],
+        mcp__fixagent__get_product_context: ["product_context", "读取产品上下文"],
+        mcp__fixagent__search_product_docs: ["product_search", "检索产品文档"],
+        mcp__fixagent__search_historical_cases: ["case_search", "检索历史案例"],
+        mcp__fixagent__get_action_policy: ["action_policy", "检查操作安全策略"],
+        mcp__fixagent__get_case_state: ["case_state", "读取 Case 状态"],
+        mcp__fixagent__resolve_product_identity: ["product_identity", "核验产品身份"],
+        mcp__fixagent__record_complaint_evidence: ["complaint_evidence", "整理客诉证据"],
+        mcp__fixagent__get_masked_order: ["order_lookup", "查询脱敏订单"],
+        mcp__fixagent__determine_warranty_status: ["warranty", "核验质保状态"],
+        mcp__fixagent__verify_authorized_dealer: ["dealer_check", "核验授权经销商"],
+        mcp__fixagent__create_after_sales_draft: ["after_sales_draft", "创建售后草稿"],
+        mcp__fixagent__request_human_confirmation: ["human_confirmation", "提交人工确认"],
+        mcp__fixagent__publish_case_response: ["response_publish", "校验并发布回答"],
+      };
+      const mapped = toolLabels[block.name];
+      if (!mapped) continue;
+      return {
+        stage: mapped[0],
+        status: "running",
+        label: mapped[1],
+      };
+    }
+    if (block.type === "tool_result" && Array.isArray(block.content)) {
+      const containsImage = block.content.some(
+        (part) => recordValue(part)?.type === "image",
+      );
+      if (containsImage) {
+        return {
+          stage: "vision_input",
+          status: "completed",
+          label: "图片已交给视觉模型",
+        };
+      }
+    }
+  }
+  return undefined;
+};
+
 export const createFixAgentServer = ({
   runtime,
   workspaceRoot,
@@ -756,6 +911,9 @@ export const createFixAgentServer = ({
         const traceFile = join(traceDirectory, "events.jsonl");
         await writeFile(traceFile, "", { mode: 0o600 });
         await chmod(traceFile, 0o600);
+        const progressFile = join(traceDirectory, "progress.jsonl");
+        await writeFile(progressFile, "", { mode: 0o600 });
+        await chmod(progressFile, 0o600);
         const knowledgeSnapshotFile = join(
           fixAgentDirectory,
           "knowledge-snapshot.json",
@@ -783,6 +941,37 @@ export const createFixAgentServer = ({
           cutoff_at: initialKnowledgeSnapshot.cutoff_at,
           evaluation_case_id:
             initialKnowledgeSnapshot.case_binding?.evaluation_case_id ?? null,
+        });
+        return;
+      }
+
+      const progressRoute = url.pathname.match(
+        /^\/api\/cases\/([0-9a-f-]+)\/progress$/,
+      );
+      if (request.method === "GET" && progressRoute) {
+        const caseId = progressRoute[1];
+        const turnId = url.searchParams.get("turn_id");
+        if (!caseId || !turnId || !z.string().uuid().safeParse(turnId).success) {
+          sendJson(response, 400, { error: "INVALID_REQUEST" });
+          return;
+        }
+        const caseWorkspaceRoot = join(workspaceRoot, caseId);
+        try {
+          const state = await readCaseState(caseWorkspaceRoot);
+          if (state.case_id !== caseId) {
+            throw new FixAgentDomainError("CASE_ID_MISMATCH");
+          }
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            sendJson(response, 404, { error: "CASE_NOT_FOUND" });
+            return;
+          }
+          throw error;
+        }
+        sendJson(response, 200, {
+          case_id: caseId,
+          turn_id: turnId,
+          events: await readCaseProgress(caseWorkspaceRoot, turnId),
         });
         return;
       }
@@ -829,14 +1018,17 @@ export const createFixAgentServer = ({
         const validateResponseForState = (
           candidate: unknown,
           state: CaseState,
-        ): PublishedCaseResponse =>
-          validatePublishedCaseResponse({
+        ): Promise<PublishedCaseResponse> =>
+          loadIssuedAfterSalesEvidenceRefs({
+            caseId,
+            caseWorkspaceRoot,
+          }).then((issuedEvidenceRefs) => validatePublishedCaseResponse({
             candidate,
             snapshot: caseKnowledgeSnapshot,
             caseKnowledgeSnapshotId: state.knowledge_snapshot_id,
             caseKnowledgeSnapshotHash: state.knowledge_snapshot_hash,
-            evidenceRefs: state.evidence_refs,
-          });
+            evidenceRefs: [...state.evidence_refs, ...issuedEvidenceRefs],
+          }));
 
         const body = parseMessageBody(
           await readJson(request, maxMessageRequestBytes),
@@ -863,6 +1055,21 @@ export const createFixAgentServer = ({
           caseWorkspaceRoot,
           idempotencyKey: `response:${messageIdempotencyKey}`,
           requestHash,
+        });
+
+        await appendCaseProgress({
+          caseWorkspaceRoot,
+          event: {
+            turn_id: messageIdempotencyKey,
+            occurred_at: new Date().toISOString(),
+            stage: "request_received",
+            status: "completed",
+            label: "请求已接收",
+            detail:
+              body.attachments.length > 0
+                ? `${body.attachments.length} 个附件`
+                : "文本消息",
+          },
         });
 
         const lease = await acquireCaseWorkerLease(
@@ -928,7 +1135,7 @@ export const createFixAgentServer = ({
               );
             }
             if (publishedBeforeCompletion) {
-              const recoveredResponse = validateResponseForState(
+              const recoveredResponse = await validateResponseForState(
                 publishedBeforeCompletion.result,
                 caseState,
               );
@@ -960,6 +1167,19 @@ export const createFixAgentServer = ({
               messageId: messageIdempotencyKey,
               attachments: body.attachments,
             });
+            if (persistedAttachments.length > 0) {
+              await appendCaseProgress({
+                caseWorkspaceRoot,
+                event: {
+                  turn_id: messageIdempotencyKey,
+                  occurred_at: new Date().toISOString(),
+                  stage: "attachments_saved",
+                  status: "completed",
+                  label: "附件已安全保存",
+                  detail: persistedAttachments.map((item) => item.name).join(", "),
+                },
+              });
+            }
             const agentMessage = buildAgentMessage(
               body.message,
               persistedAttachments,
@@ -1055,10 +1275,24 @@ export const createFixAgentServer = ({
 
             let publishedResponse: PublishedCaseResponse | undefined;
             let lastAttemptError: unknown;
+            let terminalProviderFailure = false;
             const turnBaseSessionId = caseState.claude_session_id;
             for (let attempt = 1; attempt <= 2; attempt += 1) {
               try {
                 let attemptResponse: PublishedCaseResponse | undefined;
+                await appendCaseProgress({
+                  caseWorkspaceRoot,
+                  event: {
+                    turn_id: messageIdempotencyKey,
+                    occurred_at: new Date().toISOString(),
+                    stage: "agent_start",
+                    status: "running",
+                    label: attempt === 1 ? "启动 Agent 分析" : "重新启动 Agent 分析",
+                    detail: selectedRuntimeProfile
+                      ? `${selectedRuntimeProfile.display_name} · ${selectedRuntimeProfile.profile.requested_model_id}`
+                      : caseState.model_id,
+                  },
+                });
                 await runtime.run({
                   caseId,
                   cwd: caseWorkspaceRoot,
@@ -1075,7 +1309,7 @@ export const createFixAgentServer = ({
                     const current = await readCaseState(caseWorkspaceRoot);
                     let parsed: PublishedCaseResponse;
                     try {
-                      parsed = validateResponseForState(candidate, current);
+                      parsed = await validateResponseForState(candidate, current);
                     } catch {
                       throw new AgentResponseRejectedError();
                     }
@@ -1117,6 +1351,17 @@ export const createFixAgentServer = ({
                     caseState = await readCaseState(caseWorkspaceRoot);
                   },
                   async trace(event) {
+                    const progress = summarizeRuntimeProgress(event);
+                    if (progress) {
+                      await appendCaseProgress({
+                        caseWorkspaceRoot,
+                        event: {
+                          turn_id: messageIdempotencyKey,
+                          occurred_at: new Date().toISOString(),
+                          ...progress,
+                        },
+                      });
+                    }
                     await appendCaseTrace({
                       caseWorkspaceRoot,
                       leaseId: lease.lease_id,
@@ -1132,6 +1377,12 @@ export const createFixAgentServer = ({
               } catch (error) {
                 lastAttemptError = error;
                 const code = domainErrorCode(error, "UNKNOWN_RUNTIME_ERROR");
+                terminalProviderFailure = [
+                  "PROVIDER_AUTHENTICATION_FAILED",
+                  "PROVIDER_ACCESS_DENIED",
+                  "PROVIDER_REQUEST_REJECTED",
+                  "PROVIDER_RATE_LIMITED",
+                ].includes(code);
                 if (
                   [
                     "CASE_IDEMPOTENCY_CONFLICT",
@@ -1178,12 +1429,13 @@ export const createFixAgentServer = ({
                 });
                 if (committedResponse) {
                   const current = await readCaseState(caseWorkspaceRoot);
-                  publishedResponse = validateResponseForState(
+                  publishedResponse = await validateResponseForState(
                     committedResponse.result,
                     current,
                   );
                   break;
                 }
+                if (terminalProviderFailure) break;
               }
             }
 
@@ -1193,16 +1445,55 @@ export const createFixAgentServer = ({
               const isPublicationFailure =
                 failure instanceof AgentResponseRejectedError ||
                 failure instanceof AgentResponseNotPublishedError;
-              return {
-                status: isPublicationFailure ? 502 : 500,
+              const failureCode = domainErrorCode(
+                failure,
+                "UNKNOWN_RUNTIME_ERROR",
+              );
+              const providerFailureStatus =
+                failureCode === "PROVIDER_AUTHENTICATION_FAILED"
+                  ? 401
+                  : failureCode === "PROVIDER_ACCESS_DENIED"
+                    ? 403
+                    : failureCode === "PROVIDER_REQUEST_REJECTED"
+                      ? 400
+                      : failureCode === "PROVIDER_RATE_LIMITED"
+                        ? 429
+                        : undefined;
+              const failedPlan = {
+                status: providerFailureStatus ?? (isPublicationFailure ? 502 : 500),
                 body: {
-                  error: isPublicationFailure
-                    ? failure.message
-                    : "SYSTEM_ERROR",
+                  error:
+                    providerFailureStatus !== undefined
+                      ? failureCode
+                      : isPublicationFailure
+                        ? failure.message
+                        : "SYSTEM_ERROR",
                 },
               };
+              await appendCaseProgress({
+                caseWorkspaceRoot,
+                event: {
+                  turn_id: messageIdempotencyKey,
+                  occurred_at: new Date().toISOString(),
+                  stage: "turn_failed",
+                  status: "error",
+                  label: "分析未完成",
+                  detail: String(failedPlan.body.error),
+                },
+              });
+              return failedPlan;
             }
 
+            await appendCaseProgress({
+              caseWorkspaceRoot,
+              event: {
+                turn_id: messageIdempotencyKey,
+                occurred_at: new Date().toISOString(),
+                stage: "turn_completed",
+                status: "completed",
+                label: "回答已完成并通过校验",
+              },
+            });
             return {
               status: 200,
               body: {

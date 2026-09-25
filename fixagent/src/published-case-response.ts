@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const MAX_PUBLISHED_CLAIM_REFS = 20;
 export const MAX_PUBLISHED_CONFLICT_REFS = 8;
+export const MAX_PUBLISHED_EVIDENCE_REFS = 20;
 
 export const knowledgeReferenceShape = z
   .object({
@@ -27,6 +28,11 @@ export const publishedCaseResponseShape = {
     .array(knowledgeReferenceShape)
     .max(MAX_PUBLISHED_CLAIM_REFS)
     .describe("Approved Knowledge references supporting product claims"),
+  evidence_refs: z
+    .array(z.string().trim().min(1).max(240))
+    .max(MAX_PUBLISHED_EVIDENCE_REFS)
+    .optional()
+    .describe("Exact Case-issued evidence references supporting current-Case claims"),
   action_card_refs: z
     .array(actionCardReferenceShape)
     .max(8)
@@ -81,14 +87,24 @@ export const publishedCaseResponseSchema = z
       });
     }
 
+    const evidenceRefs = response.evidence_refs ?? [];
+    if (new Set(evidenceRefs).size !== evidenceRefs.length) {
+      context.addIssue({
+        code: "custom",
+        path: ["evidence_refs"],
+        message: "Duplicate Case evidence references are not allowed",
+      });
+    }
+
     if (
       response.response_type === "INFORMATION" &&
-      response.claim_refs.length === 0
+      response.claim_refs.length === 0 &&
+      evidenceRefs.length === 0
     ) {
       context.addIssue({
         code: "custom",
         path: ["claim_refs"],
-        message: "Information responses require approved Knowledge",
+        message: "Information responses require approved Knowledge or issued Case evidence",
       });
     }
     if (
@@ -114,6 +130,7 @@ export const publishedCaseResponseSchema = z
     if (
       response.response_type === "GENERAL" &&
       (response.claim_refs.length > 0 ||
+        evidenceRefs.length > 0 ||
         (response.knowledge_conflict_refs?.length ?? 0) > 0)
     ) {
       context.addIssue({

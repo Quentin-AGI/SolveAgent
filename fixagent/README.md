@@ -1,6 +1,6 @@
 # FixAgent V0 Runtime
 
-This workspace is the first runnable tracer bullet for the frozen FixAgent V0.2 specification. It is intentionally separate from the existing SolveAgent brand site.
+This workspace is the runnable FixAgent foundation for Anker Innovations eufy robot-vacuum after-sales. The earlier CarPlay V0.2 documents remain historical inputs; the public V0.3 proposal is the active product direction.
 
 The current slice provides:
 
@@ -11,6 +11,7 @@ The current slice provides:
 - exact completed-turn and crash-window replay for duplicate request keys, Worker fencing on every state write, a frozen non-secret provider profile fingerprint (including credential type, model tiers, capabilities, SDK and expected Claude Code identity), and one automatic same-profile recovery after a recorded `SYSTEM_ERROR`;
 - a hash-verified, per-Case frozen Knowledge Snapshot with approval-mode, source-cutoff, version, configuration, and applicability checks;
 - in-process MCP tools for product context, approved product-document and historical-Case search, applicable Action Card policy, and current Case State;
+- deterministic MCP tools for eufy product identity, masked order evidence, warranty status, authorized-dealer verification, non-executing after-sales drafts, and simulated human confirmation;
 - `publish_case_response` as the only user-visible response path, with exact structured Knowledge and Action Card references validated again by the host process;
 - a minimal Case conversation UI carrying the mandatory `NON-SCORED · DATA_NO_GO` status;
 - text, image, PDF, JSON, Markdown, CSV, and log attachments stored privately inside the isolated Case Scratch directory;
@@ -19,9 +20,9 @@ The current slice provides:
 - a deterministic pre-Agent text Safety Gate that emits only the frozen fallback sentence and atomically creates a clearly labelled simulated `SAFETY_HANDOFF`.
 - seven-day raw Trace expiry with an operational alert if deletion fails; report-freeze deletion will be added with the reporting subsystem.
 
-The built-in snapshot is deliberately empty, so the default runtime can still publish only non-operational evidence requests. A reviewed, hash-valid snapshot must be supplied through `FIXAGENT_KNOWLEDGE_SNAPSHOT_FILE` before knowledge-backed information can be published. Its sources carry separate publication and retrieval timestamps, and every entry records the approving person, time, and authority. Evaluation snapshots also carry a hash-locked Case catalog: the request selects an `evaluation_case_id`, while the server derives the Case cutoff from that entry's Issue creation time. Historical Case knowledge is stored as attributable, timestamped content items, allowing the materializer to remove the target Issue, its comments and solution, transitively linked duplicates, generated FAQs, and all content published after the cutoff. Approved Knowledge conflicts name both sources, their blocked actions, and any evidence-based resolution; unresolved conflicts require both citations and remain recorded in Case State, while blocked actions stay unavailable. Action Cards additionally remain unavailable until all Case evidence prerequisites are present, including the universal safely-parked evidence reference; Level 2 cards require an exact product/version `ACTION_SOP`, and applicable prohibitions veto matching cards. No network source is promoted to `EVAL_APPROVED` automatically.
+The built-in snapshot is deliberately empty, so the default runtime can still publish only non-operational evidence requests. A reviewed, hash-valid eufy snapshot must be supplied through `FIXAGENT_KNOWLEDGE_SNAPSHOT_FILE` before knowledge-backed information can be published. Its sources carry separate publication and retrieval timestamps, and every entry records the approving person, time, and authority. Evaluation snapshots also carry a hash-locked Case catalog: the request selects an `evaluation_case_id`, while the server derives the Case cutoff from that entry's Issue creation time. Historical Case knowledge is stored as attributable, timestamped content items, allowing the materializer to remove the target Issue, its comments and solution, transitively linked duplicates, generated FAQs, and all content published after the cutoff. Approved Knowledge conflicts name both sources, their blocked actions, and any evidence-based resolution; unresolved conflicts require both citations and remain recorded in Case State, while blocked actions stay unavailable. Action Cards additionally remain unavailable until all Case evidence prerequisites are present, including the approved device-safe-state evidence reference; Level 2 cards require an exact product/version `ACTION_SOP`, and applicable prohibitions veto matching cards. No network source is promoted to `EVAL_APPROVED` automatically.
 
-It does not yet implement the approved knowledge corpus, provider-certified vision behavior, in-session Safety signals, Case State write tools, action-result recording, ordinary Handoff, Evidence Broker, or provider certification. It is an architecture-validation slice and must not be used for live device troubleshooting.
+It does not yet include Anker/eufy-provided production orders, dealer directories, approved troubleshooting content, real complaint materials, provider-certified vision behavior, in-session Safety signals, Case State write tools, action-result recording, Evidence Broker, or provider certification. The after-sales dataset defaults to `NOT_CONFIGURED`; important actions remain simulated drafts and must not be presented as production execution.
 
 ## Install and verify
 
@@ -39,7 +40,9 @@ pnpm build
 
 Copy `.env.example` into your secret-management workflow and supply an Anthropic-compatible provider profile. Do not commit the resulting credentials.
 
-An approved snapshot file is optional. When omitted, each new Case is pinned by both ID and content hash to `EMPTY_EVAL_V0`. Existing Cases always resume from their own read-only snapshot copy and never switch silently when the configured snapshot changes. A non-empty Evaluation snapshot requires `evaluation_case_id` in the Case creation request. The server resolves that identifier against the approved catalog, derives the exact Issue-creation cutoff, excludes target-related and later content, and freezes the resulting Case-specific snapshot.
+An approved snapshot file is optional. When omitted, each new Case is pinned by both ID and content hash to `EMPTY_EUFY_EVAL_V0`. Existing Cases always resume from their own read-only snapshot copy and never switch silently when the configured snapshot changes. A non-empty Evaluation snapshot requires `evaluation_case_id` in the Case creation request. The server resolves that identifier against the approved catalog, derives the exact Issue-creation cutoff, excludes target-related and later content, and freezes the resulting Case-specific snapshot.
+
+Set `FIXAGENT_AFTER_SALES_DATA_FILE` to a private, hash-valid dataset matching `fixagent.after-sales-data.v0`. The file is available only to the deterministic MCP implementation and is denied to native Agent reads. When omitted, S1 Pro disambiguation remains available but orders and authorized dealers return `NOT_CONFIGURED`/not found.
 
 ```bash
 pnpm dev

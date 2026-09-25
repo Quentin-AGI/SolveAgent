@@ -19,7 +19,9 @@ import {
   type AgentRuntime,
   type ProviderRuntimeProfile,
 } from "../src/app.js";
+import { issueAfterSalesEvidenceRef } from "../src/after-sales.js";
 import { commitCaseEvent, readCaseState } from "../src/case-store.js";
+import { FixAgentDomainError } from "../src/domain-error.js";
 import { createProviderRegistryEditor } from "../src/provider-registry.js";
 import {
   createKnowledgeSnapshot,
@@ -256,6 +258,55 @@ test("user creates a Case and receives only the Agent-published response", async
   }
 });
 
+test("host publishes deterministic after-sales facts only with issued Case evidence", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const evidenceRef = "order:0123456789abcdef";
+  const runtime: AgentRuntime = {
+    async run(request) {
+      await issueAfterSalesEvidenceRef({
+        caseId: request.caseId,
+        caseWorkspaceRoot: request.cwd,
+        evidenceRef,
+        evidenceType: "ORDER",
+        createdAt: "2026-09-24T00:00:00.000Z",
+      });
+      await request.publish({
+        message_markdown: "该脱敏订单当前处于质保期内。",
+        claim_refs: [],
+        evidence_refs: [evidenceRef],
+        action_card_refs: [],
+        response_type: "INFORMATION",
+      });
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "帮我查一下质保" }),
+      },
+    );
+
+    assert.equal(replied.status, 200);
+    const body = (await replied.json()) as {
+      response?: { evidence_refs?: string[] };
+    };
+    assert.deepEqual(body.response?.evidence_refs, [evidenceRef]);
+  } finally {
+    await app.close();
+  }
+});
+
 test("user can send a file-only message from the isolated Case workspace", async () => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
   temporaryDirectories.push(workspaceRoot);
@@ -410,7 +461,7 @@ test("a transient Runtime failure is persisted and retried once", async () => {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "屏幕异常" }),
+        body: JSON.stringify({ message: "扫地机器人无法回到基站" }),
       },
     );
 
@@ -420,6 +471,139 @@ test("a transient Runtime failure is persisted and retried once", async () => {
       await readFile(join(workspaceRoot, caseId, "events.jsonl"), "utf8"),
       /"event_type":"SYSTEM_ERROR"/,
     );
+  } finally {
+    await app.close();
+  }
+});
+
+test("a provider authentication failure returns immediately without rerunning the Agent", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  let agentRuns = 0;
+  const runtime: AgentRuntime = {
+    async run() {
+      agentRuns += 1;
+      throw new FixAgentDomainError("PROVIDER_AUTHENTICATION_FAILED");
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: "分析图片" }),
+      },
+    );
+
+    assert.equal(replied.status, 401);
+    assert.deepEqual(await replied.json(), {
+      error: "PROVIDER_AUTHENTICATION_FAILED",
+    });
+    assert.equal(agentRuns, 1);
+  } finally {
+    await app.close();
+  }
+});
+
+test("analysis progress exposes safe stages without leaking trace payloads", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
+  temporaryDirectories.push(workspaceRoot);
+  const runtime: AgentRuntime = {
+    async run(request) {
+      await request.trace({
+        type: "system",
+        subtype: "init",
+        model: "qwen3.8-flash",
+        secret: "must-not-leak",
+      });
+      await request.trace({
+        type: "assistant",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              name: "Read",
+              input: { file_path: "/private/attachment.png" },
+            },
+          ],
+        },
+      });
+      await request.trace({
+        type: "user",
+        message: {
+          content: [
+            {
+              type: "tool_result",
+              content: [
+                {
+                  type: "image",
+                  source: { type: "base64", data: "image-secret" },
+                },
+              ],
+            },
+          ],
+        },
+      });
+      await request.publish({
+        message_markdown: "图片分析完成。",
+        claim_refs: [],
+        action_card_refs: [],
+        response_type: "EVIDENCE_REQUEST",
+      });
+    },
+  };
+  const app = createFixAgentServer({ runtime, workspaceRoot });
+  await app.listen();
+
+  try {
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const turnId = "00000000-0000-4000-8000-000000000778";
+    const replied = await fetch(
+      new URL(`/api/cases/${caseId}/messages`, app.url),
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          message: "分析图片",
+          idempotency_key: turnId,
+        }),
+      },
+    );
+    assert.equal(replied.status, 200);
+
+    const progress = await fetch(
+      new URL(`/api/cases/${caseId}/progress?turn_id=${turnId}`, app.url),
+    );
+    assert.equal(progress.status, 200);
+    const body = (await progress.json()) as {
+      events: Array<{ stage: string; label: string }>;
+    };
+    assert.deepEqual(
+      body.events.map((event) => event.stage),
+      [
+        "request_received",
+        "agent_start",
+        "model_connected",
+        "attachment_read",
+        "vision_input",
+        "turn_completed",
+      ],
+    );
+    const serialized = JSON.stringify(body);
+    assert.equal(serialized.includes("must-not-leak"), false);
+    assert.equal(serialized.includes("/private/attachment.png"), false);
+    assert.equal(serialized.includes("image-secret"), false);
   } finally {
     await app.close();
   }
@@ -516,7 +700,7 @@ test("a response committed before a Runtime crash is returned without a second A
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "屏幕异常" }),
+        body: JSON.stringify({ message: "扫地机器人无法回到基站" }),
       },
     );
     const result = (await replied.json()) as {
@@ -555,7 +739,7 @@ test("a terminal Runtime error is replayed and never consumes another recovery",
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          message: "屏幕异常",
+          message: "扫地机器人无法回到基站",
           idempotency_key: idempotencyKey,
         }),
       });
@@ -637,7 +821,7 @@ test("user never receives an unvalidated diagnostic or device action", async () 
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "屏幕异常" }),
+        body: JSON.stringify({ message: "扫地机器人无法回到基站" }),
       },
     );
 
@@ -1187,6 +1371,8 @@ test("user sees the non-scored Case conversation entry point", async () => {
     assert.match(html, /id="model-picker-button"/);
     assert.match(html, /id="model-settings-button"/);
     assert.match(html, /id="attachment-input"/);
+    assert.match(html, /video\/mp4/);
+    assert.match(html, /重要售后动作需人工确认/);
     const attachmentButton = html.match(
       /<button[^>]+id="attachment-button"[^>]*>/,
     )?.[0];
@@ -1403,7 +1589,7 @@ test("model settings persist privately and become selectable without a restart",
     });
     const { case_id: caseId } = (await created.json()) as { case_id: string };
     const state = await readCaseState(join(workspaceRoot, caseId));
-    assert.equal(state.model_id, "qwen3.7-max");
+    assert.equal(state.model_id, "qwen3.8-flash");
 
     const updated = await fetch(new URL("/api/models/qwen", app.url), {
       method: "PUT",
@@ -1425,6 +1611,10 @@ test("model settings persist privately and become selectable without a restart",
     );
     assert.equal(replied.status, 200);
     assert.equal(runtimeEnvironment?.ANTHROPIC_AUTH_TOKEN, "rotated-secret");
+    assert.equal(
+      runtimeEnvironment?.FIXAGENT_PROVIDER_CAPABILITIES,
+      "tools,vision",
+    );
     assert.equal(
       runtimeEnvironment?.ANTHROPIC_BASE_URL,
       "https://qwen.example.test/anthropic",
@@ -1505,7 +1695,7 @@ test("Case starts with a read-only project Skill, Scratch workspace, and private
       const frozenKnowledge = JSON.parse(
         await readFile(frozenKnowledgeFile, "utf8"),
       ) as { snapshot_id: string; content_hash: string };
-      assert.equal(frozenKnowledge.snapshot_id, "EMPTY_EVAL_V0");
+      assert.equal(frozenKnowledge.snapshot_id, "EMPTY_EUFY_EVAL_V0");
       assert.match(frozenKnowledge.content_hash, /^[a-f0-9]{64}$/);
       assert.equal((await stat(frozenKnowledgeFile)).mode & 0o777, 0o444);
 
@@ -1533,7 +1723,7 @@ test("Case starts with a read-only project Skill, Scratch workspace, and private
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ message: "屏幕异常" }),
+        body: JSON.stringify({ message: "扫地机器人无法回到基站" }),
       },
     );
 

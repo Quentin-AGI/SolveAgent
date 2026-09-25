@@ -7,6 +7,14 @@ Evaluation data is deliberately split into two files:
 - `evaluation-manifest.private.json` contains prompts, allowed steps, and the
   scoring rubric. Keep it outside every Case workspace and Agent-readable path.
 
+## eufy robot-vacuum V0 intake
+
+`eufy-robot-vacuum/` reserves the approved five minimum Case slots for the
+active Anker Innovations eufy scope. They are deliberately marked
+`PENDING_SOURCE_DATA`: the current qualified count is 0/5, so this is not yet a
+runnable suite and cannot produce `PRODUCT_GO`. See its README for the source,
+Gold, cutoff, hash and Evidence Broker requirements.
+
 ## CAMB fault-tree baseline
 
 The baseline is generated from CAMB's CC0-1.0 `faultTree/trouble_tree.jsonl`:

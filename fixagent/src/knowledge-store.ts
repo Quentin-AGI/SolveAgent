@@ -48,8 +48,10 @@ const approvalMetadataShape = {
   approved_at: z.string().datetime(),
   approval_authority: approvalAuthoritySchema,
 };
+export const DEVICE_SAFE_STATE_EVIDENCE_REF = "case:device_safe_state";
+/** @deprecated Kept as a source-compatible alias while old evaluation fixtures migrate. */
 export const VEHICLE_SAFELY_PARKED_EVIDENCE_REF =
-  "case:vehicle_safely_parked";
+  DEVICE_SAFE_STATE_EVIDENCE_REF;
 
 const applicabilitySchema = z
   .object({
@@ -139,8 +141,8 @@ const actionCardWithoutHashSchema = z
       .array(identifierSchema)
       .refine(
         (references) =>
-          references.includes(VEHICLE_SAFELY_PARKED_EVIDENCE_REF),
-        "Every Action Card requires evidence that the vehicle is safely parked",
+          references.includes(DEVICE_SAFE_STATE_EVIDENCE_REF),
+        "Every Action Card requires evidence that the device is in its approved safe state",
       ),
     risk_level: z.enum(["LEVEL_1", "LEVEL_2"]),
     steps: z.array(z.string().min(1)).min(1),
@@ -950,6 +952,15 @@ export const validatePublishedCaseResponse = ({
     }
   }
 
+  const availableEvidenceRefs = new Set(evidenceRefs);
+  if (
+    (response.evidence_refs ?? []).some(
+      (reference) => !availableEvidenceRefs.has(reference),
+    )
+  ) {
+    throw new FixAgentDomainError("CASE_EVIDENCE_REFERENCE_NOT_AVAILABLE");
+  }
+
   const conflictStates = getApplicableKnowledgeConflictStates(
     snapshot,
     evidenceRefs,
@@ -1017,14 +1028,14 @@ export const validatePublishedCaseResponse = ({
 };
 
 export const EMPTY_EVALUATION_KNOWLEDGE_SNAPSHOT = createKnowledgeSnapshot({
-  snapshot_id: "EMPTY_EVAL_V0",
+  snapshot_id: "EMPTY_EUFY_EVAL_V0",
   mode: "EVALUATION",
   created_at: "2026-09-23T00:00:00.000Z",
   cutoff_at: "2026-09-22T23:59:59.999Z",
   evaluation_cases: [],
   product_context: {
-    product_family: "CRANKSHAFT_RASPBERRY_PI_DISPLAY",
-    configuration_id: "UNCONFIRMED_REFERENCE_CONFIGURATION",
+    product_family: "ANKER_EUFY_ROBOT_VACUUM",
+    configuration_id: "UNCONFIRMED_EUFY_SKU",
     hardware_version: "UNCONFIRMED",
     software_version: "UNCONFIRMED",
     region: "GLOBAL",
