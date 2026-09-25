@@ -24,10 +24,12 @@ ENV NODE_OPTIONS=--max-old-space-size=512
 RUN apt-get update \
   && apt-get install --yes --no-install-recommends \
     bash \
+    bubblewrap \
     ca-certificates \
     git \
     python3 \
     ripgrep \
+    socat \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

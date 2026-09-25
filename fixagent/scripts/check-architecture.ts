@@ -6,6 +6,7 @@ const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const packageJson = JSON.parse(
   await readFile(join(projectRoot, "package.json"), "utf8"),
 ) as { dependencies?: Record<string, string> };
+const dockerfile = await readFile(join(projectRoot, "Dockerfile"), "utf8");
 
 const forbiddenDependencies = [
   "@anthropic-ai/sdk",
@@ -30,6 +31,17 @@ if (forbiddenInstalled.length > 0) {
 
 if (!directDependencies.includes("@anthropic-ai/claude-agent-sdk")) {
   throw new Error("Claude Agent SDK is not a direct production dependency.");
+}
+
+const requiredLinuxSandboxPackages = ["bubblewrap", "ripgrep", "socat"];
+const missingLinuxSandboxPackages = requiredLinuxSandboxPackages.filter(
+  (dependency) =>
+    !new RegExp(`(?:^|\\s)${dependency}(?:\\s|\\\\|$)`, "mu").test(dockerfile),
+);
+if (missingLinuxSandboxPackages.length > 0) {
+  throw new Error(
+    `Docker runtime is missing Claude Agent SDK sandbox dependencies: ${missingLinuxSandboxPackages.join(", ")}`,
+  );
 }
 
 const sourceFiles = async (directory: string): Promise<string[]> => {
