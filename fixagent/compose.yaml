@@ -20,6 +20,12 @@ services:
       - /tmp:size=128m,mode=1777
     security_opt:
       - no-new-privileges:true
+      # The Claude Agent SDK sandbox uses bubblewrap. Docker's default
+      # AppArmor/seccomp profiles block the unprivileged namespace setup that
+      # bubblewrap needs, so those outer profiles are disabled while the
+      # container remains non-root, capability-free, and no-new-privileges.
+      - apparmor=unconfined
+      - seccomp=unconfined
     cap_drop:
       - ALL
     pids_limit: 256

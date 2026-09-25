@@ -7,6 +7,7 @@ const packageJson = JSON.parse(
   await readFile(join(projectRoot, "package.json"), "utf8"),
 ) as { dependencies?: Record<string, string> };
 const dockerfile = await readFile(join(projectRoot, "Dockerfile"), "utf8");
+const compose = await readFile(join(projectRoot, "compose.yaml"), "utf8");
 
 const forbiddenDependencies = [
   "@anthropic-ai/sdk",
@@ -42,6 +43,24 @@ if (missingLinuxSandboxPackages.length > 0) {
   throw new Error(
     `Docker runtime is missing Claude Agent SDK sandbox dependencies: ${missingLinuxSandboxPackages.join(", ")}`,
   );
+}
+
+const requiredContainerSecurityOptions = [
+  "no-new-privileges:true",
+  "apparmor=unconfined",
+  "seccomp=unconfined",
+];
+const missingContainerSecurityOptions = requiredContainerSecurityOptions.filter(
+  (option) => !compose.includes(option),
+);
+if (missingContainerSecurityOptions.length > 0) {
+  throw new Error(
+    `Docker Compose is missing Claude Agent SDK sandbox security options: ${missingContainerSecurityOptions.join(", ")}`,
+  );
+}
+
+if (!/cap_drop:\s*\n\s*- ALL/mu.test(compose)) {
+  throw new Error("Docker Compose must drop all Linux capabilities.");
 }
 
 const sourceFiles = async (directory: string): Promise<string[]> => {
