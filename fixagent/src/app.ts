@@ -163,6 +163,7 @@ const publicFiles = new Map([
   ["/", { name: "index.html", type: "text/html; charset=utf-8" }],
   ["/app.js", { name: "app.js", type: "text/javascript; charset=utf-8" }],
   ["/client-id.js", { name: "client-id.js", type: "text/javascript; charset=utf-8" }],
+  ["/request-json.js", { name: "request-json.js", type: "text/javascript; charset=utf-8" }],
   ["/styles.css", { name: "styles.css", type: "text/css; charset=utf-8" }],
 ]);
 
@@ -824,6 +825,7 @@ export const createFixAgentServer = ({
           .object({
             evaluation_case_id: z.string().min(1).optional(),
             provider_profile_id: z.string().min(1).optional(),
+            idempotency_key: z.string().uuid().optional(),
           })
           .strict()
           .parse(await readJson(request));
@@ -876,8 +878,41 @@ export const createFixAgentServer = ({
           null,
           2,
         )}\n`;
-        const caseId = randomUUID();
+        const caseId = createBody.idempotency_key ?? randomUUID();
         const caseWorkspaceRoot = join(workspaceRoot, caseId);
+        if (createBody.idempotency_key) {
+          try {
+            const existingState = await readCaseState(caseWorkspaceRoot);
+            if (
+              existingState.provider_profile_hash !== selectedProviderProfileHash ||
+              existingState.knowledge_snapshot_id !==
+                initialKnowledgeSnapshot.snapshot_id ||
+              existingState.knowledge_snapshot_hash !==
+                initialKnowledgeSnapshot.content_hash
+            ) {
+              throw new FixAgentDomainError("CASE_IDEMPOTENCY_CONFLICT");
+            }
+            sendJson(response, 200, {
+              case_id: caseId,
+              knowledge_snapshot_id: initialKnowledgeSnapshot.snapshot_id,
+              knowledge_snapshot_hash: initialKnowledgeSnapshot.content_hash,
+              cutoff_at: initialKnowledgeSnapshot.cutoff_at,
+              evaluation_case_id:
+                initialKnowledgeSnapshot.case_binding?.evaluation_case_id ?? null,
+            });
+            return;
+          } catch (error) {
+            if (
+              !(
+                error instanceof Error &&
+                "code" in error &&
+                error.code === "ENOENT"
+              )
+            ) {
+              throw error;
+            }
+          }
+        }
         const scratchDirectory = join(caseWorkspaceRoot, "scratch");
         const traceDirectory = join(caseWorkspaceRoot, "trace");
         const fixAgentDirectory = join(caseWorkspaceRoot, ".fixagent");

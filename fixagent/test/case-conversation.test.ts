@@ -209,6 +209,36 @@ afterEach(async () => {
   );
 });
 
+test("Case creation replays the same Case after an empty-response retry", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-create-retry-test-"));
+  temporaryDirectories.push(workspaceRoot);
+
+  const app = createFixAgentServer({
+    runtime: { async run() {} },
+    workspaceRoot,
+  });
+  await app.listen();
+
+  try {
+    const idempotencyKey = "018f3d92-7601-4d74-8bb7-2aee6fef6281";
+    const request = () =>
+      fetch(new URL("/api/cases", app.url), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ idempotency_key: idempotencyKey }),
+      });
+
+    const first = await request();
+    const repeated = await request();
+    assert.equal(first.status, 201);
+    assert.equal(repeated.status, 200);
+    assert.deepEqual(await repeated.json(), await first.json());
+    assert.deepEqual(await readdir(workspaceRoot), [idempotencyKey]);
+  } finally {
+    await app.close();
+  }
+});
+
 test("user creates a Case and receives only the Agent-published response", async () => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
   temporaryDirectories.push(workspaceRoot);

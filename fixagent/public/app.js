@@ -1,4 +1,5 @@
 import { createClientUuid } from "/client-id.js";
+import { requestJson } from "/request-json.js";
 
 const appShell = document.querySelector(".app-shell");
 const sidebar = document.querySelector("#sidebar");
@@ -98,13 +99,6 @@ const providerDefaultApiUrls = {
   zhipu: "https://open.bigmodel.cn/api/anthropic",
   deepseek: "https://api.deepseek.com/anthropic",
 };
-
-async function requestJson(url, options) {
-  const response = await fetch(url, options);
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "REQUEST_FAILED");
-  return body;
-}
 
 function showEmptyState() {
   messages.replaceChildren(emptyStateTemplate.content.cloneNode(true));
@@ -943,6 +937,7 @@ form.addEventListener("submit", async (event) => {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          idempotency_key: createClientUuid(),
           ...(selectedModelId ? { provider_profile_id: selectedModelId } : {}),
         }),
       });
@@ -998,6 +993,13 @@ form.addEventListener("submit", async (event) => {
         : error instanceof Error &&
             error.message === "AGENT_RESPONSE_NOT_PUBLISHED"
           ? "模型未完成回答发布，请重试。"
+          : error instanceof Error &&
+              [
+                "SERVICE_EMPTY_RESPONSE",
+                "SERVICE_INVALID_RESPONSE",
+                "SERVICE_UNAVAILABLE",
+              ].includes(error.message)
+            ? "服务连接刚刚中断，系统已自动重试但仍未恢复，请稍后再次发送。"
           : "请求未完成，请稍后重试。";
     appendMessage("agent", errorMessage, {
       error: true,
