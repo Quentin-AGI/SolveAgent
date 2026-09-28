@@ -1420,6 +1420,15 @@ test("user sees the non-scored Case conversation entry point", async () => {
       /export function createScrollFollowState/,
     );
 
+    const caseHistoryModule = await fetch(
+      new URL("/case-history.js", app.url),
+    );
+    assert.equal(caseHistoryModule.status, 200);
+    assert.match(
+      await caseHistoryModule.text(),
+      /export function loadCaseHistory/,
+    );
+
     const created = await fetch(new URL("/api/cases", app.url), {
       method: "POST",
       headers: { "content-type": "application/json" },

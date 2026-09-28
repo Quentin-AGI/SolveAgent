@@ -1,4 +1,5 @@
 import { createClientUuid } from "/client-id.js";
+import { loadCaseHistory, saveCaseHistory } from "/case-history.js";
 import { requestJson } from "/request-json.js";
 import { createScrollFollowState } from "/scroll-follow.js";
 
@@ -48,9 +49,17 @@ const serviceIndicators = [
 const environmentStatus = document.querySelector("#environment-status");
 const emptyStateTemplate = document.querySelector("#empty-state-template");
 
+const caseHistoryStorage = (() => {
+  try {
+    return window.localStorage;
+  } catch {
+    return undefined;
+  }
+})();
+
 let caseId;
 let activeMessages = [];
-let recentCases = [];
+let recentCases = loadCaseHistory(caseHistoryStorage);
 let navigationLocked = false;
 let modelOptions = [];
 let selectedModelId;
@@ -837,6 +846,7 @@ function saveCurrentCase(title) {
     record,
     ...recentCases.filter((item) => item.id !== caseId),
   ].slice(0, 8);
+  saveCaseHistory(caseHistoryStorage, recentCases);
   renderCaseList();
 }
 
@@ -970,6 +980,7 @@ form.addEventListener("submit", async (event) => {
   setBusy(true);
   status.textContent = "正在分析…";
   appendMessage("user", visibleMessage, { attachments: attachmentNames });
+  if (caseId) saveCurrentCase(caseTitle);
   input.value = "";
   clearPendingAttachments();
   resizeInput();
