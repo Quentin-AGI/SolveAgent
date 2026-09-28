@@ -1443,6 +1443,77 @@ test("user sees the non-scored Case conversation entry point", async () => {
   }
 });
 
+test("visible Case history survives reload and remains isolated by browser cookie", async () => {
+  const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-history-test-"));
+  temporaryDirectories.push(workspaceRoot);
+
+  const app = createFixAgentServer({
+    runtime: { async run() {} },
+    workspaceRoot,
+  });
+  await app.listen();
+
+  try {
+    const page = await fetch(app.url);
+    const setCookie = page.headers.get("set-cookie");
+    assert.match(setCookie ?? "", /HttpOnly; SameSite=Lax/);
+    const cookie = setCookie?.split(";", 1)[0];
+    assert.ok(cookie);
+
+    const created = await fetch(new URL("/api/cases", app.url), {
+      method: "POST",
+    });
+    const { case_id: caseId } = (await created.json()) as { case_id: string };
+    const record = {
+      title: "扫地机器人无法回充",
+      status: "Case 已完成",
+      messages: [
+        {
+          role: "user",
+          text: "扫地机器人无法回充",
+          error: false,
+          attachments: [],
+        },
+        {
+          role: "agent",
+          text: "请补充充电座照片。",
+          error: false,
+          attachments: [],
+        },
+      ],
+    };
+
+    const saved = await fetch(new URL(`/api/history/${caseId}`, app.url), {
+      method: "PUT",
+      headers: {
+        cookie,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(record),
+    });
+    assert.equal(saved.status, 200);
+
+    const restored = await fetch(new URL("/api/history", app.url), {
+      headers: { cookie },
+    });
+    assert.equal(restored.status, 200);
+    assert.equal(restored.headers.get("cache-control"), "private, no-store");
+    const restoredBody = (await restored.json()) as {
+      cases: Array<{ id: string; messages: Array<{ text: string }> }>;
+    };
+    assert.equal(restoredBody.cases[0]?.id, caseId);
+    assert.equal(
+      restoredBody.cases[0]?.messages[1]?.text,
+      "请补充充电座照片。",
+    );
+
+    const otherBrowser = await fetch(new URL("/api/history", app.url));
+    assert.deepEqual(await otherBrowser.json(), { cases: [] });
+  } finally {
+    await app.close();
+  }
+});
+
 test("user selects a sanitized model profile that stays frozen to the Case", async () => {
   const workspaceRoot = await mkdtemp(join(tmpdir(), "fixagent-case-test-"));
   temporaryDirectories.push(workspaceRoot);

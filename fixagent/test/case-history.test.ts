@@ -3,7 +3,7 @@ import test from "node:test";
 
 // The helper is shipped directly to the browser, so it intentionally remains JavaScript.
 // @ts-expect-error The public browser module has no separate declaration file.
-import { loadCaseHistory, saveCaseHistory } from "../public/case-history.js";
+import { loadCaseHistory, mergeCaseHistories, saveCaseHistory } from "../public/case-history.js";
 
 class MemoryStorage {
   readonly values = new Map<string, string>();
@@ -85,4 +85,14 @@ test("quota pressure drops the oldest Case before the newest one", () => {
     loadCaseHistory(storage).map((record: { id: string }) => record.id),
     ["10000000-0000-4000-8000-000000000004"],
   );
+});
+
+test("local and server history merge by the newest Case revision", () => {
+  const id = "10000000-0000-4000-8000-000000000006";
+  const oldRecord = caseRecord(id, 1, "旧回答");
+  const newRecord = caseRecord(id, 2, "新回答");
+
+  const merged = mergeCaseHistories([oldRecord], [newRecord]);
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0]?.messages[1]?.text, "新回答");
 });

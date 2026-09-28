@@ -58,16 +58,19 @@ const normalizeCase = (candidate) => {
 
 const normalizeHistory = (candidate) => {
   if (!Array.isArray(candidate)) return [];
+  const ordered = candidate
+    .map(normalizeCase)
+    .filter(Boolean)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
   const unique = new Map();
-  for (const entry of candidate) {
-    const record = normalizeCase(entry);
-    if (!record || unique.has(record.id)) continue;
-    unique.set(record.id, record);
+  for (const record of ordered) {
+    if (!unique.has(record.id)) unique.set(record.id, record);
   }
-  return [...unique.values()]
-    .sort((left, right) => right.updatedAt - left.updatedAt)
-    .slice(0, maximumCases);
+  return [...unique.values()].slice(0, maximumCases);
 };
+
+export const mergeCaseHistories = (...histories) =>
+  normalizeHistory(histories.flat());
 
 export function loadCaseHistory(storage) {
   if (!storage) return [];

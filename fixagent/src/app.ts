@@ -52,6 +52,7 @@ import {
   knownProviderCatalog,
   type KnownProviderId,
 } from "./provider-catalog.js";
+import { readUiHistory, writeUiHistoryRecord } from "./ui-history.js";
 import {
   createSafetyHandoff,
   detectSafetyRedline,
@@ -370,6 +371,36 @@ const sendJson = (
 ): void => {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   response.end(JSON.stringify(body));
+};
+
+const historyClientCookieName = "fixagent_history_client";
+const oneYearInSeconds = 365 * 24 * 60 * 60;
+
+const getHistoryClientId = (
+  request: IncomingMessage,
+  response: ServerResponse,
+): string => {
+  const cookies = new Map(
+    (request.headers.cookie ?? "")
+      .split(";")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .map((part) => {
+        const separator = part.indexOf("=");
+        return separator < 0
+          ? [part, ""]
+          : [part.slice(0, separator), part.slice(separator + 1)];
+      }),
+  );
+  const existing = cookies.get(historyClientCookieName);
+  if (existing && z.string().uuid().safeParse(existing).success) return existing;
+
+  const clientId = randomUUID();
+  response.setHeader(
+    "set-cookie",
+    `${historyClientCookieName}=${clientId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${oneYearInSeconds}`,
+  );
+  return clientId;
 };
 
 const isLoopbackAddress = (address: string | undefined): boolean =>
@@ -743,6 +774,7 @@ export const createFixAgentServer = ({
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", "http://localhost");
+      const historyClientId = getHistoryClientId(request, response);
 
       const publicFile = request.method === "GET" ? publicFiles.get(url.pathname) : undefined;
       if (publicFile) {
@@ -754,6 +786,51 @@ export const createFixAgentServer = ({
 
       if (request.method === "GET" && url.pathname === "/api/models") {
         sendJson(response, 200, createPublicModelCatalog());
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/history") {
+        response.setHeader("cache-control", "private, no-store");
+        sendJson(response, 200, {
+          cases: await readUiHistory(workspaceRoot, historyClientId),
+        });
+        return;
+      }
+
+      const historyRoute = url.pathname.match(
+        /^\/api\/history\/([0-9a-f-]{36})$/i,
+      );
+      if (request.method === "PUT" && historyRoute) {
+        response.setHeader("cache-control", "private, no-store");
+        const caseId = historyRoute[1];
+        if (!caseId || !z.string().uuid().safeParse(caseId).success) {
+          sendJson(response, 400, { error: "INVALID_REQUEST" });
+          return;
+        }
+        let caseState: CaseState;
+        try {
+          caseState = await readCaseState(join(workspaceRoot, caseId));
+          if (caseState.case_id !== caseId) {
+            throw new FixAgentDomainError("CASE_ID_MISMATCH");
+          }
+        } catch (error) {
+          if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+            sendJson(response, 404, { error: "CASE_NOT_FOUND" });
+            return;
+          }
+          throw error;
+        }
+        const runtimeProfile = profilesByHash.get(
+          caseState.provider_profile_hash,
+        );
+        const record = await writeUiHistoryRecord({
+          workspaceRoot,
+          clientId: historyClientId,
+          caseId,
+          ...(runtimeProfile ? { providerProfileId: runtimeProfile.id } : {}),
+          candidate: await readJson(request, 2 * 1024 * 1024),
+        });
+        sendJson(response, 200, record);
         return;
       }
 

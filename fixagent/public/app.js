@@ -1,5 +1,9 @@
 import { createClientUuid } from "/client-id.js";
-import { loadCaseHistory, saveCaseHistory } from "/case-history.js";
+import {
+  loadCaseHistory,
+  mergeCaseHistories,
+  saveCaseHistory,
+} from "/case-history.js";
 import { requestJson } from "/request-json.js";
 import { createScrollFollowState } from "/scroll-follow.js";
 
@@ -69,6 +73,7 @@ let selectedSettingsProviderId = "qwen";
 let settingsBusy = false;
 let pendingAttachments = [];
 const scrollFollow = createScrollFollowState();
+const historySaveQueues = new Map();
 
 const maxAttachmentCount = 4;
 const maxAttachmentBytes = 4 * 1024 * 1024;
@@ -829,6 +834,41 @@ function currentCaseStatus() {
   return caseId ? status.textContent : "尚未创建 Case";
 }
 
+function persistCaseHistoryToServer(record) {
+  const previous = historySaveQueues.get(record.id) ?? Promise.resolve();
+  const pending = previous
+    .catch(() => {})
+    .then(() =>
+      requestJson(`/api/history/${record.id}`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          title: record.title,
+          status: record.status,
+          messages: record.messages,
+        }),
+      }),
+    )
+    .catch(() => {})
+    .finally(() => {
+      if (historySaveQueues.get(record.id) === pending) {
+        historySaveQueues.delete(record.id);
+      }
+    });
+  historySaveQueues.set(record.id, pending);
+}
+
+async function loadServerCaseHistory() {
+  try {
+    const result = await requestJson("/api/history");
+    recentCases = mergeCaseHistories(recentCases, result.cases);
+    saveCaseHistory(caseHistoryStorage, recentCases);
+    renderCaseList();
+  } catch {
+    // The local history remains usable when the server history is unavailable.
+  }
+}
+
 function saveCurrentCase(title) {
   if (!caseId) return;
 
@@ -837,7 +877,10 @@ function saveCurrentCase(title) {
     id: caseId,
     title: title || existing?.title || "未命名诊断",
     status: currentCaseStatus(),
-    messages: activeMessages,
+    messages: activeMessages.map((message) => ({
+      ...message,
+      attachments: [...message.attachments],
+    })),
     providerProfileId: selectedModelId,
     updatedAt: Date.now(),
   };
@@ -847,6 +890,7 @@ function saveCurrentCase(title) {
     ...recentCases.filter((item) => item.id !== caseId),
   ].slice(0, 8);
   saveCaseHistory(caseHistoryStorage, recentCases);
+  persistCaseHistoryToServer(record);
   renderCaseList();
 }
 
@@ -1265,6 +1309,7 @@ window.addEventListener("resize", () => {
 
 showEmptyState();
 renderCaseList();
+void loadServerCaseHistory();
 resizeInput();
 setServiceState("pending");
 void loadModelCatalog();
