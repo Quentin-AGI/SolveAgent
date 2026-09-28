@@ -1401,6 +1401,7 @@ test("user sees the non-scored Case conversation entry point", async () => {
     assert.match(html, /id="model-picker-button"/);
     assert.match(html, /id="model-settings-button"/);
     assert.match(html, /id="attachment-input"/);
+    assert.match(html, /id="jump-to-latest"/);
     assert.match(html, /video\/mp4/);
     assert.match(html, /重要售后动作需人工确认/);
     const attachmentButton = html.match(
@@ -1409,6 +1410,15 @@ test("user sees the non-scored Case conversation entry point", async () => {
     assert.ok(attachmentButton);
     assert.doesNotMatch(attachmentButton, /\bdisabled\b/);
     assert.doesNotMatch(html, /id="settings-model-id"/);
+
+    const scrollFollowModule = await fetch(
+      new URL("/scroll-follow.js", app.url),
+    );
+    assert.equal(scrollFollowModule.status, 200);
+    assert.match(
+      await scrollFollowModule.text(),
+      /export function createScrollFollowState/,
+    );
 
     const created = await fetch(new URL("/api/cases", app.url), {
       method: "POST",

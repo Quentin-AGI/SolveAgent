@@ -1,5 +1,6 @@
 import { createClientUuid } from "/client-id.js";
 import { requestJson } from "/request-json.js";
+import { createScrollFollowState } from "/scroll-follow.js";
 
 const appShell = document.querySelector(".app-shell");
 const sidebar = document.querySelector("#sidebar");
@@ -18,6 +19,7 @@ const caseList = document.querySelector("#case-list");
 const noCases = document.querySelector("#no-cases");
 const newCaseButton = document.querySelector("#new-case");
 const composerDock = document.querySelector(".composer-dock");
+const jumpToLatest = document.querySelector("#jump-to-latest");
 const caseSearchButton = document.querySelector("#case-search");
 const caseSearchPanel = document.querySelector("#case-search-panel");
 const caseSearchInput = document.querySelector("#case-search-input");
@@ -57,6 +59,7 @@ let modelConfigurationEnabled = false;
 let selectedSettingsProviderId = "qwen";
 let settingsBusy = false;
 let pendingAttachments = [];
+const scrollFollow = createScrollFollowState();
 
 const maxAttachmentCount = 4;
 const maxAttachmentBytes = 4 * 1024 * 1024;
@@ -246,13 +249,51 @@ function startProgressPolling(activeCaseId, turnId, view) {
 }
 
 function scrollToLatest() {
+  if (!scrollFollow.isFollowing()) {
+    syncJumpToLatest();
+    return;
+  }
   requestAnimationFrame(() => {
-    thread.scrollTo({ top: thread.scrollHeight, behavior: "smooth" });
+    if (!scrollFollow.isFollowing()) return;
+    thread.scrollTop = thread.scrollHeight;
+    scrollFollow.resume(readScrollMetrics());
+    syncJumpToLatest();
+  });
+}
+
+function readScrollMetrics() {
+  return {
+    scrollHeight: thread.scrollHeight,
+    scrollTop: thread.scrollTop,
+    clientHeight: thread.clientHeight,
+  };
+}
+
+function syncJumpToLatest() {
+  const hasOverflow = thread.scrollHeight > thread.clientHeight + 1;
+  jumpToLatest.hidden =
+    scrollFollow.isFollowing() ||
+    !hasOverflow ||
+    messages.classList.contains("is-empty");
+}
+
+function resetScrollFollowing() {
+  scrollFollow.resume(readScrollMetrics());
+  syncJumpToLatest();
+}
+
+function forceScrollToLatest() {
+  scrollFollow.resume(readScrollMetrics());
+  requestAnimationFrame(() => {
+    thread.scrollTop = thread.scrollHeight;
+    scrollFollow.resume(readScrollMetrics());
+    syncJumpToLatest();
   });
 }
 
 function resizeInput() {
   const keepAtBottom =
+    scrollFollow.isFollowing() &&
     thread.scrollHeight - thread.scrollTop - thread.clientHeight < 96;
   input.style.height = "auto";
   input.style.height = `${Math.min(input.scrollHeight, 164)}px`;
@@ -265,6 +306,8 @@ function resizeInput() {
 function syncComposerSpace() {
   const reservedSpace = Math.ceil(composerDock.getBoundingClientRect().height + 28);
   messages.style.setProperty("--composer-space", `${reservedSpace}px`);
+  jumpToLatest.style.bottom = `${composerDock.getBoundingClientRect().height + 10}px`;
+  syncJumpToLatest();
 }
 
 function setServiceState(state) {
@@ -833,6 +876,7 @@ function activateCase(record) {
   activeMessages = Array.isArray(record.messages) ? [...record.messages] : [];
   messages.replaceChildren();
   messages.classList.toggle("is-empty", activeMessages.length === 0);
+  resetScrollFollowing();
 
   if (activeMessages.length === 0) {
     showEmptyState();
@@ -854,6 +898,7 @@ function activateCase(record) {
   renderCaseList();
   closeSidebarOnMobile();
   input.focus();
+  forceScrollToLatest();
 }
 
 function startNewCase() {
@@ -862,6 +907,7 @@ function startNewCase() {
   caseId = undefined;
   activeMessages = [];
   showEmptyState();
+  resetScrollFollowing();
   threadTitle.textContent = "新建诊断 Case";
   document.title = "FixAgent";
   status.textContent = "尚未创建 Case";
@@ -1030,6 +1076,27 @@ attachmentInput.addEventListener("change", async () => {
   attachmentInput.value = "";
   if (files.length) await addAttachments(files);
 });
+
+thread.addEventListener(
+  "wheel",
+  (event) => {
+    if (event.deltaY >= 0) return;
+    scrollFollow.pause();
+    syncJumpToLatest();
+  },
+  { passive: true },
+);
+
+thread.addEventListener(
+  "scroll",
+  () => {
+    scrollFollow.observe(readScrollMetrics());
+    syncJumpToLatest();
+  },
+  { passive: true },
+);
+
+jumpToLatest.addEventListener("click", forceScrollToLatest);
 
 newCaseButton.addEventListener("click", startNewCase);
 document.querySelector("#sidebar-open").addEventListener("click", openSidebar);

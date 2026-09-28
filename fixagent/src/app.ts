@@ -164,6 +164,7 @@ const publicFiles = new Map([
   ["/app.js", { name: "app.js", type: "text/javascript; charset=utf-8" }],
   ["/client-id.js", { name: "client-id.js", type: "text/javascript; charset=utf-8" }],
   ["/request-json.js", { name: "request-json.js", type: "text/javascript; charset=utf-8" }],
+  ["/scroll-follow.js", { name: "scroll-follow.js", type: "text/javascript; charset=utf-8" }],
   ["/styles.css", { name: "styles.css", type: "text/css; charset=utf-8" }],
 ]);
 
