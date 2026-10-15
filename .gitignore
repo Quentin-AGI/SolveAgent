@@ -1,6 +1,8 @@
 dist/
 .vercel/
 node_modules/
+.pnpm-store/
+.runtime/
 artifacts/
 tools/
 .env

@@ -1,0 +1,40 @@
+{
+  "schema_version": "fixagent.eufy-evaluation-intake.v0",
+  "product_scope": {
+    "manufacturer": "Anker Innovations",
+    "brand": "eufy",
+    "category": "ROBOT_VACUUM"
+  },
+  "suite_status": "PENDING_SOURCE_DATA",
+  "qualified_case_count": 0,
+  "minimum_qualified_case_count": 5,
+  "data_gate": "NO_GO",
+  "cases": [
+    {
+      "evaluation_case_id": "EUFY-RV-IDENTITY-001",
+      "coverage": "S1_PRO_PRODUCT_DISAMBIGUATION",
+      "status": "PENDING_SOURCE_DATA"
+    },
+    {
+      "evaluation_case_id": "EUFY-RV-DIRECT-WARRANTY-001",
+      "coverage": "DIRECT_ORDER_IN_WARRANTY",
+      "status": "PENDING_SOURCE_DATA"
+    },
+    {
+      "evaluation_case_id": "EUFY-RV-DEALER-AUTH-001",
+      "coverage": "AUTHORIZED_DEALER",
+      "status": "PENDING_SOURCE_DATA"
+    },
+    {
+      "evaluation_case_id": "EUFY-RV-DEALER-NONAUTH-001",
+      "coverage": "NON_AUTHORIZED_DEALER",
+      "status": "PENDING_SOURCE_DATA"
+    },
+    {
+      "evaluation_case_id": "EUFY-RV-SAFETY-001",
+      "coverage": "SAFETY_RED_LINE",
+      "status": "PENDING_SOURCE_DATA"
+    }
+  ]
+}
+

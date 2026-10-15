@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f7f7f6" />
+    <title>FixAgent</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-panel-left" viewBox="0 0 24 24">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="M9 3v18" />
+      </symbol>
+      <symbol id="icon-square-pen" viewBox="0 0 24 24">
+        <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+        <path d="M18.4 2.6a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z" />
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </symbol>
+      <symbol id="icon-folder" viewBox="0 0 24 24">
+        <path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9L9.6 4A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+      </symbol>
+      <symbol id="icon-history" viewBox="0 0 24 24">
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <path d="M3 3v5h5M12 7v5l3 2" />
+      </symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24">
+        <path d="M20 13c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V5l8-3 8 3Z" />
+        <path d="m9 12 2 2 4-4" />
+      </symbol>
+      <symbol id="icon-activity" viewBox="0 0 24 24">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+      </symbol>
+      <symbol id="icon-chevron-down" viewBox="0 0 24 24">
+        <path d="m6 9 6 6 6-6" />
+      </symbol>
+      <symbol id="icon-chevron-right" viewBox="0 0 24 24">
+        <path d="m9 18 6-6-6-6" />
+      </symbol>
+      <symbol id="icon-plus" viewBox="0 0 24 24">
+        <path d="M5 12h14M12 5v14" />
+      </symbol>
+      <symbol id="icon-arrow-up" viewBox="0 0 24 24">
+        <path d="m5 12 7-7 7 7M12 19V5" />
+      </symbol>
+      <symbol id="icon-sparkles" viewBox="0 0 24 24">
+        <path d="m12 3-1.7 4.3L6 9l4.3 1.7L12 15l1.7-4.3L18 9l-4.3-1.7Z" />
+        <path d="m19 15-.8 2.2L16 18l2.2.8L19 21l.8-2.2L22 18l-2.2-.8Z" />
+      </symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24">
+        <path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.2a2 2 0 0 1-2 0L6.3 6a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.8v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.1-.1a2 2 0 0 1 2 0l.4.2a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.2a2 2 0 0 1 2 0l.1.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.5a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.1.1a2 2 0 0 1-2 0l-.4-.2a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z" />
+        <circle cx="12" cy="12" r="3" />
+      </symbol>
+      <symbol id="icon-x" viewBox="0 0 24 24">
+        <path d="M18 6 6 18M6 6l12 12" />
+      </symbol>
+      <symbol id="icon-trash" viewBox="0 0 24 24">
+        <path d="M3 6h18M8 6V4h8v2M19 6l-1 15H6L5 6M10 11v6M14 11v6" />
+      </symbol>
+    </svg>
+
+    <template id="empty-state-template">
+      <section class="empty-state">
+        <div class="empty-mark"><svg><use href="#icon-sparkles"></use></svg></div>
+        <h1>从现象开始</h1>
+        <p>仅用于开发验证。普通问题只请求非操作性证据；安全红线只显示固定停止提示并创建模拟工单。禁止用于真实设备排障。</p>
+      </section>
+    </template>
+
+    <div class="app-shell">
+      <aside id="sidebar" class="sidebar" aria-label="FixAgent 导航">
+        <div class="window-strip">
+          <div class="window-controls" aria-hidden="true">
+            <span class="window-dot close"></span>
+            <span class="window-dot minimize"></span>
+            <span class="window-dot maximize"></span>
+          </div>
+          <button id="sidebar-close" class="icon-button sidebar-close" type="button" aria-label="收起侧栏" title="收起侧栏">
+            <svg><use href="#icon-panel-left"></use></svg>
+          </button>
+        </div>
+
+        <div class="brand-row">
+          <div class="brand">FixAgent <svg><use href="#icon-chevron-down"></use></svg></div>
+          <button id="case-search" class="icon-button" type="button" aria-label="搜索诊断记录" aria-expanded="false" title="搜索诊断记录">
+            <svg><use href="#icon-search"></use></svg>
+          </button>
+        </div>
+
+        <div id="case-search-panel" class="case-search-panel" hidden>
+          <svg aria-hidden="true"><use href="#icon-search"></use></svg>
+          <label class="visually-hidden" for="case-search-input">搜索诊断记录</label>
+          <input id="case-search-input" type="search" placeholder="搜索诊断记录" autocomplete="off" />
+        </div>
+
+        <nav class="primary-nav" aria-label="主导航">
+          <button id="new-case" class="nav-item active" type="button" aria-current="page">
+            <svg><use href="#icon-square-pen"></use></svg>
+            <span>新建 Case</span>
+          </button>
+          <div class="nav-item" aria-label="诊断记录">
+            <svg><use href="#icon-history"></use></svg>
+            <span>诊断记录</span>
+          </div>
+          <div class="nav-item" aria-label="知识边界">
+            <svg><use href="#icon-shield"></use></svg>
+            <span>知识边界</span>
+          </div>
+          <div class="nav-item" aria-label="运行状态">
+            <svg><use href="#icon-activity"></use></svg>
+            <span>运行状态</span>
+            <span id="nav-service-state" class="nav-status-dot is-pending" role="status" aria-label="服务状态待验证" title="服务状态待验证"></span>
+          </div>
+        </nav>
+
+        <section class="case-section" aria-labelledby="recent-heading">
+          <div class="section-heading">
+            <span id="recent-heading">最近</span>
+            <svg><use href="#icon-chevron-right"></use></svg>
+          </div>
+          <div id="case-list" class="case-list"></div>
+          <p id="no-cases" class="no-cases">暂无诊断记录</p>
+        </section>
+
+        <div class="sidebar-footer">
+          <div class="avatar" aria-hidden="true">F</div>
+          <div class="environment-copy">
+            <strong>本地验证环境</strong>
+            <span id="environment-status">服务状态待验证</span>
+          </div>
+          <div class="sidebar-footer-actions">
+            <button id="model-settings-button" class="icon-button settings-button" type="button" aria-label="模型设置" title="模型设置" disabled>
+              <svg><use href="#icon-settings"></use></svg>
+            </button>
+            <span id="footer-service-state" class="environment-indicator is-pending" aria-hidden="true" title="服务状态待验证"></span>
+          </div>
+        </div>
+      </aside>
+
+      <button id="sidebar-backdrop" class="sidebar-backdrop" type="button" aria-label="关闭侧栏"></button>
+
+      <section class="workspace" aria-label="诊断工作区">
+        <header class="topbar">
+          <div class="topbar-title">
+            <button id="sidebar-open" class="icon-button" type="button" aria-label="打开侧栏" title="打开侧栏">
+              <svg><use href="#icon-panel-left"></use></svg>
+            </button>
+            <svg class="title-icon"><use href="#icon-folder"></use></svg>
+            <strong id="thread-title">新建诊断 Case</strong>
+          </div>
+          <div class="topbar-actions">
+            <div class="data-status" title="评估数据不可进入训练或评分流程">
+              <span></span>
+              NON-SCORED · DATA_NO_GO
+            </div>
+          </div>
+        </header>
+
+        <main id="thread" class="thread">
+          <div id="messages" class="messages is-empty" aria-live="polite"></div>
+        </main>
+
+        <button id="jump-to-latest" class="jump-to-latest" type="button" hidden>
+          <span>回到最新消息</span>
+          <svg aria-hidden="true"><use href="#icon-arrow-up"></use></svg>
+        </button>
+
+        <div class="composer-dock">
+          <div class="composer-status-row">
+            <span id="run-status" role="status" aria-live="polite">尚未创建 Case</span>
+          </div>
+          <form id="case-form" class="composer">
+            <label class="visually-hidden" for="message">当前遇到了什么问题？</label>
+            <textarea
+              id="message"
+              name="message"
+              maxlength="8000"
+              rows="1"
+              placeholder="描述你看到的现象"
+              aria-label="当前遇到了什么问题？"
+            ></textarea>
+            <input
+              id="attachment-input"
+              class="visually-hidden"
+              type="file"
+              multiple
+              accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.log,.md,.json,.csv,.mp4,.mov,.webm,image/jpeg,image/png,image/gif,image/webp,application/pdf,text/plain,text/markdown,application/json,text/csv,video/mp4,video/quicktime,video/webm"
+            />
+            <div id="attachment-tray" class="attachment-tray" aria-label="待发送文件" hidden></div>
+            <div class="composer-toolbar">
+              <div class="composer-tools">
+                <button id="attachment-button" class="icon-button add-button" type="button" aria-label="添加文件" title="添加文件">
+                  <svg><use href="#icon-plus"></use></svg>
+                </button>
+                <span class="safety-note"><svg><use href="#icon-shield"></use></svg>重要售后动作需人工确认</span>
+              </div>
+              <div class="composer-actions">
+                <div id="model-picker" class="model-picker">
+                  <button
+                    id="model-picker-button"
+                    class="model-picker-button"
+                    type="button"
+                    aria-haspopup="listbox"
+                    aria-expanded="false"
+                    title="选择模型"
+                  >
+                    <span id="selected-model-name">加载模型…</span>
+                    <svg><use href="#icon-chevron-down"></use></svg>
+                  </button>
+                  <div id="model-menu" class="model-menu" role="listbox" aria-label="选择模型" hidden>
+                    <div class="model-menu-heading">选择模型</div>
+                    <div id="model-options" class="model-options"></div>
+                  </div>
+                </div>
+                <button id="submit-button" class="send-button" type="submit" aria-label="发送" title="发送" disabled>
+                  <svg><use href="#icon-arrow-up"></use></svg>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <div id="model-settings-overlay" class="settings-overlay" hidden>
+      <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="model-settings-title">
+        <header class="settings-header">
+          <h2 id="model-settings-title">模型设置</h2>
+          <button id="model-settings-close" class="icon-button" type="button" aria-label="关闭模型设置" title="关闭">
+            <svg><use href="#icon-x"></use></svg>
+          </button>
+        </header>
+        <div class="settings-body">
+          <nav id="settings-provider-list" class="settings-provider-list" aria-label="模型供应商"></nav>
+          <form id="model-settings-form" class="settings-form">
+            <div class="settings-form-heading">
+              <div>
+                <h3 id="settings-provider-name">通义千问</h3>
+                <span id="settings-provider-label">阿里云百炼</span>
+              </div>
+              <span id="settings-provider-status" class="settings-provider-status">待配置</span>
+            </div>
+
+            <label class="settings-field">
+              <span>API 地址</span>
+              <input id="settings-base-url" name="anthropic_base_url" type="url" inputmode="url" autocomplete="off" required />
+            </label>
+            <label class="settings-field">
+              <span>API Key</span>
+              <input id="settings-credential" name="api_key" type="password" autocomplete="new-password" />
+            </label>
+
+            <div class="settings-form-footer">
+              <span id="settings-save-status" role="status" aria-live="polite"></span>
+              <div class="settings-form-actions">
+                <button id="settings-delete" class="settings-delete-button" type="button">
+                  <svg><use href="#icon-trash"></use></svg>
+                  移除配置
+                </button>
+                <button id="settings-save" class="settings-save-button" type="submit">保存</button>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+    </div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

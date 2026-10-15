@@ -1,0 +1,143 @@
+{
+  "schema_version": "fixagent.knowledge-snapshot.v0",
+  "snapshot_id": "VISA_PCB_V1",
+  "mode": "EVALUATION",
+  "created_at": "2026-09-24T00:00:00.000Z",
+  "corpus_cutoff_at": "2026-09-24T00:00:00.000Z",
+  "cutoff_at": "2026-09-24T00:00:00.000Z",
+  "evaluation_cases": [
+    {
+      "evaluation_case_id": "VISA-PCB-0001",
+      "target_issue_id": "VISA-PCB-SOURCE-0001",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0002",
+      "target_issue_id": "VISA-PCB-SOURCE-0002",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0003",
+      "target_issue_id": "VISA-PCB-SOURCE-0003",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0004",
+      "target_issue_id": "VISA-PCB-SOURCE-0004",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0005",
+      "target_issue_id": "VISA-PCB-SOURCE-0005",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0006",
+      "target_issue_id": "VISA-PCB-SOURCE-0006",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0007",
+      "target_issue_id": "VISA-PCB-SOURCE-0007",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0008",
+      "target_issue_id": "VISA-PCB-SOURCE-0008",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0009",
+      "target_issue_id": "VISA-PCB-SOURCE-0009",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0010",
+      "target_issue_id": "VISA-PCB-SOURCE-0010",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0011",
+      "target_issue_id": "VISA-PCB-SOURCE-0011",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0012",
+      "target_issue_id": "VISA-PCB-SOURCE-0012",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0013",
+      "target_issue_id": "VISA-PCB-SOURCE-0013",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0014",
+      "target_issue_id": "VISA-PCB-SOURCE-0014",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0015",
+      "target_issue_id": "VISA-PCB-SOURCE-0015",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0016",
+      "target_issue_id": "VISA-PCB-SOURCE-0016",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0017",
+      "target_issue_id": "VISA-PCB-SOURCE-0017",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0018",
+      "target_issue_id": "VISA-PCB-SOURCE-0018",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0019",
+      "target_issue_id": "VISA-PCB-SOURCE-0019",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0020",
+      "target_issue_id": "VISA-PCB-SOURCE-0020",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0021",
+      "target_issue_id": "VISA-PCB-SOURCE-0021",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0022",
+      "target_issue_id": "VISA-PCB-SOURCE-0022",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0023",
+      "target_issue_id": "VISA-PCB-SOURCE-0023",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0024",
+      "target_issue_id": "VISA-PCB-SOURCE-0024",
+      "issue_created_at": "2026-09-24T00:00:00.000Z"
+    }
+  ],
+  "case_binding": null,
+  "product_context": {
+    "product_family": "VISA-PCB",
+    "configuration_id": "pcb1-pcb4",
+    "hardware_version": "DATASET",
+    "software_version": "NOT_APPLICABLE",
+    "region": "GLOBAL"
+  },
+  "documents": [],
+  "action_cards": [],
+  "prohibited_actions": [],
+  "knowledge_conflicts": [],
+  "content_hash": "c7dcba6ea90ea826e10e4971d6b9b85cef1e314c7beb97ac4a69a5d7432fddc4"
+}

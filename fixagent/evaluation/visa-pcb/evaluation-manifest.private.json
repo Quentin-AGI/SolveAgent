@@ -1,0 +1,806 @@
+{
+  "schema_version": "fixagent.evaluation-manifest.v0",
+  "benchmark_id": "VISA-PCB-V1",
+  "created_at": "2026-09-24T00:00:00.000Z",
+  "source": {
+    "name": "VisA PCB subset",
+    "uri": "https://github.com/amazon-science/spot-diff",
+    "license": "CC-BY-4.0",
+    "content_hash": "17d676d43becc9b3de4f2685518afa1ea691b991e9c210a69c27af1785536810"
+  },
+  "approval": {
+    "status": "EVAL_APPROVED",
+    "approved_by": "FixAgent evaluation owner",
+    "approved_at": "2026-09-24T00:00:00.000Z",
+    "authority": "EVALUATION_DATA_OWNER"
+  },
+  "cases": [
+    {
+      "evaluation_case_id": "VISA-PCB-0001",
+      "target_issue_id": "VISA-PCB-SOURCE-0001",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@029e35033ad4",
+        "content_hash": "33a72e2669201c0ee685a007b7cfc639b7a5d765e14e7b3a726797febbbdba94"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-001.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-001.jpg",
+          "content_hash": "e67db34e1045d7b8f01173a2f3e0138a6d89700e8a83d1426b6de0464e1e5e9d"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：弯曲。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "弯曲",
+          "Bent"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0002",
+      "target_issue_id": "VISA-PCB-SOURCE-0002",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@7ce8eece620a",
+        "content_hash": "908da0a870242fdba09b3473a65a41a6f71bc41748c412acf0b51b631fadcb90"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-002.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-002.jpg",
+          "content_hash": "a5c044990118bd3fae4019c6df32e4b14cb7c81bb7da2deb44ce5b5c9cd49a94"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：熔化。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "熔化",
+          "Melt"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0003",
+      "target_issue_id": "VISA-PCB-SOURCE-0003",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@b8903516ea29",
+        "content_hash": "cf699746dbb74392f48d1e46b7713ad2633d08f37095060098b015ec7ca0015a"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-003.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-003.jpg",
+          "content_hash": "73053007e5f02db7d64b2559b09e0088386242839990e35631aad83b70b21e9d"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：缺件。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "缺件",
+          "Missing"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0004",
+      "target_issue_id": "VISA-PCB-SOURCE-0004",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@35002f116ad4",
+        "content_hash": "6d030193721f7b9d0bd4d810dfc819f72875bd4bc9e038c579f27625932a1391"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-004.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-004.jpg",
+          "content_hash": "f67fd6308abf72e2ae864ccd5dfe8c3b1dfa5a46fc8eba0f47517dbcb7499f6d"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：划痕。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "划痕",
+          "Scratch"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0005",
+      "target_issue_id": "VISA-PCB-SOURCE-0005",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@a3481ec8dfa8",
+        "content_hash": "c605ba9fa8821e92992c0ac2bb57de6b0da1e44905bf762bf8277adbbcc22fcd"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-005.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-005.jpg",
+          "content_hash": "cdd134e70b2ebfb048b9d50e13b68af24e16f9130d083f4f6cfbd63a74f884af"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "未发现明显外观异常。完成基础功能检测并继续观察；仅凭照片不能确认内部电气状态。",
+        "fault_classifications": [
+          "未发现明显异常",
+          "未见明显异常",
+          "正常"
+        ],
+        "allowed_steps": [
+          "功能检测",
+          "继续观察"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0006",
+      "target_issue_id": "VISA-PCB-SOURCE-0006",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@ee9fd1c6a3f6",
+        "content_hash": "4c69182dc6150d5e4c2861a97401bd5ec43b896884ea4e842883a2bc94257726"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-006.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-006.jpg",
+          "content_hash": "7ee5d8e7d7496860aa60447f3e779003f4bd852a9f2a1f35b9ed49103a7ef708"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：弯曲。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "弯曲",
+          "Bent"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0007",
+      "target_issue_id": "VISA-PCB-SOURCE-0007",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@bb7384a10834",
+        "content_hash": "df29e1b2bbf2f79f436932e38619a0a8bc376d406a5e09b23901e8cf8b9dc3be"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-007.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-007.jpg",
+          "content_hash": "b1db8a8110b597e35c9946fc334e8d23b78b748589eb349afd6589009e2376a4"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：熔化。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "熔化",
+          "Melt"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0008",
+      "target_issue_id": "VISA-PCB-SOURCE-0008",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@22c51d590a9a",
+        "content_hash": "e5c992d84a8c1a2b8a65944770e444feb546426ab6f321a0a8e9f48f650bd850"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-008.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-008.jpg",
+          "content_hash": "0366e453cb32875f4e09856cafd2c9ff36b90ef2d134792f03fbff77331f2d39"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：缺件。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "缺件",
+          "Missing"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0009",
+      "target_issue_id": "VISA-PCB-SOURCE-0009",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@82e63ecdbf9a",
+        "content_hash": "cc07f06924bb31a8c7cf36143c459221ecd94216752dd4229f7b6d7803b9bf54"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-009.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-009.jpg",
+          "content_hash": "220730e2d5953a49db277fff8ac0ef2fe1d90dc1140ee99b38bb3a01141d156d"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：划痕。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "划痕",
+          "Scratch"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0010",
+      "target_issue_id": "VISA-PCB-SOURCE-0010",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@75e5583cdc4e",
+        "content_hash": "c3937348bd5c58554ab074b963f4b9b997aa6f96bb15774806d0eec246408847"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-010.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-010.jpg",
+          "content_hash": "b3f01fc1c1bd43df2c5a1afa63348097f7ecbcc9ebe2fd43bed6f2d074531a37"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "未发现明显外观异常。完成基础功能检测并继续观察；仅凭照片不能确认内部电气状态。",
+        "fault_classifications": [
+          "未发现明显异常",
+          "未见明显异常",
+          "正常"
+        ],
+        "allowed_steps": [
+          "功能检测",
+          "继续观察"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0011",
+      "target_issue_id": "VISA-PCB-SOURCE-0011",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@3dec1f6a0953",
+        "content_hash": "ed21a264e091546477e4f3c9f5f562cb17618e2827c9ac77a7eaa1914fbcb68a"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-011.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-011.jpg",
+          "content_hash": "79ac7a187be52277077c7d09432c2d71611517e957165b99d12c2138d12f84c9"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：弯曲。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "弯曲",
+          "Bent"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0012",
+      "target_issue_id": "VISA-PCB-SOURCE-0012",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@73925b28c17b",
+        "content_hash": "182b16078b5fb66dd2097f77bc67c9d77657bf8185e14ee2d5c764d548c5829f"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-012.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-012.jpg",
+          "content_hash": "24ec286c64a6e03b47f4cc08d1cce7898e1d0953b5f5ac344e9659032ee91bc8"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：熔化。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "熔化",
+          "Melt"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0013",
+      "target_issue_id": "VISA-PCB-SOURCE-0013",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@b3e96ed5ed1b",
+        "content_hash": "1f04788e211dfdeb229f1b39e9ed84ebbf3fcf68599ff61035e9aa2d04ce2e60"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-013.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-013.jpg",
+          "content_hash": "8bd2716f645f6a72e8a409f5912703e522800972c7c18cae29db7ce07f2ebbdd"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：熔化、缺件。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "熔化",
+          "缺件",
+          "Melt",
+          "Missing"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0014",
+      "target_issue_id": "VISA-PCB-SOURCE-0014",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@ffe78334057b",
+        "content_hash": "c72e48276cab2fd5da189474df2891a6c6e80b78240482b639fed2550be339f7"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-014.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-014.jpg",
+          "content_hash": "d3bbad6506d415a82a4cf4ac67ee7a4ceb1612526fca6534cc948b033765b4a0"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：划痕。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "划痕",
+          "Scratch"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0015",
+      "target_issue_id": "VISA-PCB-SOURCE-0015",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@0f5249c2882b",
+        "content_hash": "193ebd10d5240f2a85a010fa2c50ab8579cba651a7f1d3bb460b7516a0b570bc"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-015.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-015.jpg",
+          "content_hash": "3ef00fac233ee2a9dbe3b9b229ac3801847d5365c8063fa3052056adf2f065f9"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "未发现明显外观异常。完成基础功能检测并继续观察；仅凭照片不能确认内部电气状态。",
+        "fault_classifications": [
+          "未发现明显异常",
+          "未见明显异常",
+          "正常"
+        ],
+        "allowed_steps": [
+          "功能检测",
+          "继续观察"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0016",
+      "target_issue_id": "VISA-PCB-SOURCE-0016",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@d7cf5b402339",
+        "content_hash": "cc37790b89e3ec1dcbe49fc634b9fd7cc267c278a1643b07212a7ebb83b5763e"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-016.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-016.jpg",
+          "content_hash": "c121111d1240de839c9716022873a68efa9af569979d4c0ff5bc26a678079b26"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：烧毁、划痕、污染。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "烧毁",
+          "划痕",
+          "污染",
+          "Burnt",
+          "Scratch",
+          "Dirt"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0017",
+      "target_issue_id": "VISA-PCB-SOURCE-0017",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@330787c4c507",
+        "content_hash": "7833d191bcf2580e78fd2855ed18d1ad3a3eccc4a66d836fac098351794dff40"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-017.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-017.jpg",
+          "content_hash": "4be5990a1ba80e06cceac8ae0fea5c16226c314ba9af294fc1d7cdcea4aa089c"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：损坏。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "损坏",
+          "Damage"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0018",
+      "target_issue_id": "VISA-PCB-SOURCE-0018",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@1d017fa7c30b",
+        "content_hash": "d3b40885935b6906b64e4ade98e649a6fe49ff819252498269ce8e9a5afd77c8"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-018.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-018.jpg",
+          "content_hash": "abba1a7ea45ad7d5de00de562240ff7aa3eb1ac4a14049d806aecd35f1ce53d7"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：烧毁、多余部件。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "烧毁",
+          "多余部件",
+          "Burnt",
+          "Extra"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0019",
+      "target_issue_id": "VISA-PCB-SOURCE-0019",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@ac46020c8706",
+        "content_hash": "87175b1d12909a6d8fc9f29ddb82931818242cab53af5dea72e58e1d52294613"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-019.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-019.jpg",
+          "content_hash": "a0f1ce92ab04d110f102a0b39abe1d6fd988d3a570cafb11bc2195c6fee15f8e"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：划痕、缺件。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "划痕",
+          "缺件",
+          "Scratch",
+          "Missing"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0020",
+      "target_issue_id": "VISA-PCB-SOURCE-0020",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@ae4bc936fcf6",
+        "content_hash": "ec674655b78a1ccef0950fcb01b28cbf01c084e6edbad738da142f3a6bc854a6"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-020.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-020.jpg",
+          "content_hash": "27c397ed733f3323f87a84a922aa8ee51a7c587a3742338008a71d4705c8294a"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：缺件、损坏。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "缺件",
+          "损坏",
+          "Missing",
+          "Damage"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0021",
+      "target_issue_id": "VISA-PCB-SOURCE-0021",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@9b4b73b06026",
+        "content_hash": "8173f794d252e519afe291bd61253386f3e2106de760e96e729fc1743f42dd0a"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-021.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-021.jpg",
+          "content_hash": "1937ddb3219e16f3b556c7c6f66a37031739f21b2f18c4115ffdaa3ae281f82d"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：划痕、污染。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "划痕",
+          "污染",
+          "Scratch",
+          "Dirt"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0022",
+      "target_issue_id": "VISA-PCB-SOURCE-0022",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@a3007b9ebe69",
+        "content_hash": "831d2ed638a2678a9faabfcd62a351529257d8bfda9b41303d3546f895d83685"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-022.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-022.jpg",
+          "content_hash": "9d2ae7988d07d5b9a9e803e057d502e9cae8f96e40859ababeed2f90ab5ce46a"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：位置错误。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "位置错误",
+          "Wrong Place"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0023",
+      "target_issue_id": "VISA-PCB-SOURCE-0023",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@027c399ec77e",
+        "content_hash": "9a59a6751ef2d10b1fcf3c911560ea9827dea3e2b9df0c9b541caa6fd9f17ecd"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-023.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-023.jpg",
+          "content_hash": "97f868fba2c9b87432abfd6aad3a79b8152445da93954b8e743c9df1b70a2a85"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "可见异常：多余部件。停止使用该电路板并由专业人员人工复检；仅凭照片不能确认内部根因。",
+        "fault_classifications": [
+          "多余部件",
+          "Extra"
+        ],
+        "allowed_steps": [
+          "停止使用",
+          "人工复检"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    },
+    {
+      "evaluation_case_id": "VISA-PCB-0024",
+      "target_issue_id": "VISA-PCB-SOURCE-0024",
+      "runtime_snapshot": {
+        "snapshot_id": "VISA_PCB_V1@887b55b0d443",
+        "content_hash": "482610671089384c2a8cf77a0e802944f3f6b9800b6e634825cc82a476bf2e29"
+      },
+      "attachments": [
+        {
+          "name": "visa-pcb-024.jpg",
+          "media_type": "image/jpeg",
+          "relative_path": "assets/visa-pcb-024.jpg",
+          "content_hash": "a7ac6b0306a280770c2f2c135fde8d535598d935ebf493ba40ffd5c04304042e"
+        }
+      ],
+      "prompt": "请检查这张 PCB 照片，指出可见异常及其大致位置，说明当前是否应继续使用，并给出下一步安全检查建议。不要仅凭照片猜测不可见的内部故障。",
+      "expected": {
+        "standard_answer": "未发现明显外观异常。完成基础功能检测并继续观察；仅凭照片不能确认内部电气状态。",
+        "fault_classifications": [
+          "未发现明显异常",
+          "未见明显异常",
+          "正常"
+        ],
+        "allowed_steps": [
+          "功能检测",
+          "继续观察"
+        ]
+      },
+      "rubric": {
+        "type": "ALLOWED_STEP_COVERAGE",
+        "pass_threshold": 0.5
+      }
+    }
+  ],
+  "content_hash": "ee155ab3d0ebed8e8a7a5cbd7dcc511f1daf6209183fbdea05a66f2bd811782c"
+}
